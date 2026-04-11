@@ -26,6 +26,8 @@
   <style>
     .banner-ok { background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.3); color:#4ade80; }
     .banner-err { background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.3); color:#f87171; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    [x-cloak] { display:none !important; }
   </style>
 
   <!-- Token section -->
@@ -155,16 +157,34 @@
   <div class="card" style="padding:24px; margin-bottom:24px;">
     <div style="margin-bottom:14px;">
       <div style="font-size:15px; font-weight:600; margin-bottom:4px;">Scan a Specific PR</div>
-      <div style="color:var(--muted); font-size:12px;">Trigger an immediate scan on any pull request URL.</div>
+      <div style="color:var(--muted); font-size:12px;">Trigger an immediate scan with live progress on any pull request URL.</div>
     </div>
     <div style="display:flex; gap:10px;">
-      <input x-model="prUrl" class="si-input" placeholder="https://github.com/owner/repo/pull/123" :disabled="!config.connected" />
-      <button @click="scanPr()" :disabled="!prUrl.trim() || !config.connected || scanningPr" class="btn-primary" style="white-space:nowrap;">
-        <span x-show="!scanningPr">Scan PR</span>
-        <span x-show="scanningPr">Scanning…</span>
+      <input x-model="prUrl" class="si-input" placeholder="https://github.com/owner/repo/pull/123"
+             :disabled="!config.connected || scanningPr"
+             @keydown.enter="scanPr()" />
+      <button @click="scanPr()" :disabled="!prUrl.trim() || !config.connected || scanningPr" class="btn-primary" style="white-space:nowrap; min-width:110px;">
+        <span x-show="!scanningPr" style="display:flex; align-items:center; gap:5px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
+          Scan PR
+        </span>
+        <span x-show="scanningPr" style="display:flex; align-items:center; gap:5px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>
+          Starting…
+        </span>
       </button>
     </div>
-    <div x-show="prScanResult" x-transition style="margin-top:10px; font-size:12px; color:#60a5fa;" x-text="prScanResult"></div>
+    <!-- PR info preview before redirect -->
+    <div x-show="prPreview" x-cloak style="margin-top:10px; padding:10px 14px; background:rgba(34,197,94,.05); border:1px solid rgba(34,197,94,.2); border-radius:7px; font-size:12px; color:var(--text); display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      <strong x-text="prPreview && prPreview.title"></strong>
+      <span style="color:var(--muted);">·</span>
+      <span style="font-family:monospace; color:var(--orange);" x-text="prPreview && prPreview.head_ref"></span>
+      <span style="color:var(--muted);">·</span>
+      <span x-text="(prPreview && prPreview.java_files) + ' Java files'"></span>
+      <span style="color:var(--muted);">→ Redirecting to live scan…</span>
+    </div>
+    <div x-show="prError" x-cloak style="margin-top:10px; padding:10px 14px; background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.2); border-radius:7px; font-size:12px; color:#f87171;" x-text="prError"></div>
   </div>
 
   <!-- Save -->
@@ -237,7 +257,8 @@ function githubSettings() {
     showToken: false,
     newRepo: '',
     prUrl: '',
-    prScanResult: '',
+    prPreview: null,
+    prError: '',
     scanningPr: false,
     saving: false,
     banner: '',
@@ -304,6 +325,8 @@ function githubSettings() {
     async scanPr() {
       if (!this.prUrl.trim()) return;
       this.scanningPr = true;
+      this.prPreview = null;
+      this.prError = '';
       try {
         const res = await fetch('/api/github/scan-pr', {
           method: 'POST',
@@ -311,13 +334,22 @@ function githubSettings() {
           body: JSON.stringify({ pr_url: this.prUrl }),
         });
         const data = await res.json();
-        if (res.ok) {
-          this.prScanResult = '✓ Scan queued — run ID: ' + data.run_id;
-          if (data.redirect) window.open(data.redirect, '_blank');
+        if (res.ok && data.redirect) {
+          // Show a brief preview then redirect to live scan page
+          this.prPreview = {
+            title: data.pr_title || `PR #${data.pr_number}`,
+            head_ref: data.head_ref || '',
+            java_files: data.java_files || 0,
+          };
+          setTimeout(() => { window.location.href = data.redirect; }, 900);
         } else {
-          this.prScanResult = '✗ ' + (data.error || 'Failed to start PR scan');
+          this.prError = data.error || 'Failed to start PR scan';
+          this.scanningPr = false;
         }
-      } finally { this.scanningPr = false; }
+      } catch(e) {
+        this.prError = 'Network error: ' + e.message;
+        this.scanningPr = false;
+      }
     },
 
     async saveSettings() {

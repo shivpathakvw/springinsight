@@ -264,6 +264,7 @@ async def api_start_scan(request: Request):
         return JSONResponse({"error": "repo_url is required"}, status_code=400)
 
     requested_agents: str | list = body.get("agents", "all")
+    branch: str | None = body.get("branch") or None  # e.g. "main", "feature/xyz"
     budget: float | None = body.get("budget")
     budget_strategy: str = body.get("budget_strategy", "value")
     use_scope: bool = body.get("use_scope", True)
@@ -273,7 +274,7 @@ async def api_start_scan(request: Request):
     data_dir = request.app.state.data_dir
 
     try:
-        project_path, source_type, source_url = resolve_project_path(repo_url, data_dir)
+        project_path, source_type, source_url = resolve_project_path(repo_url, data_dir, branch=branch)
     except Exception as exc:
         return JSONResponse({"error": f"Cannot resolve project: {exc}"}, status_code=400)
 
@@ -328,7 +329,7 @@ async def api_start_scan(request: Request):
                 status="running",
                 agents_requested=[a.id for a in agents],
                 agents_completed=[],
-                git_branch=ctx.name,
+                git_branch=branch or ctx.name,
             )
             db.add(run)
     except Exception:
@@ -356,6 +357,7 @@ async def api_start_scan(request: Request):
     response_body = {
         "run_id": run_id,
         "project_name": ctx.name,
+        "branch": branch,
         "agents": [a.id for a in agents],
         "redirect": f"/scans/{run_id}",
     }
@@ -622,6 +624,18 @@ async def settings_github(request: Request):
     )
 
 
+@app.get("/api/settings/github/status")
+async def api_github_status(request: Request):
+    """Return whether a GitHub token is configured (used by dashboard)."""
+    cfg = load_github_config()
+    token = cfg.get("github_token")
+    return JSONResponse({
+        "connected": bool(token),
+        "github_user": cfg.get("github_user"),
+        "watched_repos": len(cfg.get("watched_repos", [])),
+    })
+
+
 @app.post("/api/settings/github/connect")
 async def api_github_connect(request: Request):
     """Verify and save a GitHub token."""
@@ -694,7 +708,13 @@ async def api_save_github_settings(request: Request):
 
 @app.post("/api/github/scan-pr")
 async def api_scan_pr(request: Request):
-    """Manually trigger a scan for a specific GitHub PR URL."""
+    """Trigger an immediate scan for a specific GitHub PR URL.
+
+    Accepts JSON: {pr_url: str}
+
+    Returns {run_id, pr_number, pr_title, head_ref, java_files, redirect}
+    so the caller can redirect straight to the live scan page.
+    """
     body = await request.json()
     pr_url = body.get("pr_url", "").strip()
     if not pr_url:
@@ -702,32 +722,57 @@ async def api_scan_pr(request: Request):
 
     parsed = parse_pr_url(pr_url)
     if not parsed:
-        return JSONResponse({"error": "Invalid GitHub PR URL format"}, status_code=400)
+        return JSONResponse({"error": "Invalid GitHub PR URL. Expected: https://github.com/owner/repo/pull/123"}, status_code=400)
 
     full_name, pr_number = parsed
     token = get_github_token()
     if not token:
-        return JSONResponse({"error": "GitHub not connected — set token in Settings → GitHub PR"}, status_code=400)
+        return JSONResponse(
+            {"error": "GitHub not connected — add your token in Settings → GitHub PR first"},
+            status_code=400,
+        )
 
-    from ..github.pr_scanner import get_pr_changed_files, list_open_prs
+    from ..github.pr_scanner import get_pr_changed_files
+    import httpx
+
+    # Fetch PR metadata directly (supports open AND closed/merged PRs)
     try:
-        prs = await list_open_prs(token, full_name)
-        pr = next((p for p in prs if p["number"] == pr_number), None)
-        if not pr:
-            return JSONResponse({"error": f"PR #{pr_number} not found or not open"}, status_code=404)
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                f"https://api.github.com/repos/{full_name}/pulls/{pr_number}",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+            )
+            if resp.status_code == 404:
+                return JSONResponse({"error": f"PR #{pr_number} not found in {full_name}"}, status_code=404)
+            resp.raise_for_status()
+            pr = resp.json()
+    except httpx.HTTPStatusError as exc:
+        return JSONResponse({"error": f"GitHub API error: {exc.response.status_code}"}, status_code=500)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
 
+    head_sha = pr["head"]["sha"]
+    head_ref = pr["head"]["ref"]
+    clone_url = pr["head"]["repo"]["clone_url"]
+    pr_title = pr.get("title", f"PR #{pr_number}")
+
+    try:
         changed_files = await get_pr_changed_files(token, full_name, pr_number)
         java_files = [f for f in changed_files if f.endswith(".java")]
     except Exception as exc:
-        return JSONResponse({"error": str(exc)}, status_code=500)
+        return JSONResponse({"error": f"Could not fetch changed files: {exc}"}, status_code=500)
 
     data_dir = request.app.state.data_dir
     run_id = await github_scan_pr(
         full_name=full_name,
         pr_number=pr_number,
-        head_sha=pr["head"]["sha"],
-        clone_url=pr["head"]["repo"]["clone_url"],
-        head_ref=pr["head"]["ref"],
+        head_sha=head_sha,
+        clone_url=clone_url,
+        head_ref=head_ref,
         changed_java_files=java_files,
         data_dir=data_dir,
     )
@@ -738,6 +783,8 @@ async def api_scan_pr(request: Request):
     return JSONResponse({
         "run_id": run_id,
         "pr_number": pr_number,
+        "pr_title": pr_title,
+        "head_ref": head_ref,
         "java_files": len(java_files),
         "redirect": f"/scans/{run_id}",
     })

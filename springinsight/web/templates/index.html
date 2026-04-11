@@ -13,86 +13,164 @@
 
   <!-- ── Scan input card ── -->
   <div class="card" style="padding:24px; margin-bottom:32px;">
-    <!-- Repo URL row -->
-    <div style="display:flex; gap:12px; align-items:flex-end;">
-      <div style="flex:1;">
-        <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:8px;">
-          GitHub Repository URL or Local Path
-        </label>
-        <input
-          x-model="repoUrl"
-          type="text"
-          placeholder="https://github.com/owner/my-spring-app  or  /Users/me/projects/api-service"
-          class="si-input"
-          @keydown.enter="startScan()"
-          @blur="repoUrl.trim() && estimateCost()"
-          :disabled="scanning"
-        >
-      </div>
-      <button class="btn-primary" @click="startScan()" :disabled="scanning || !repoUrl.trim()">
-        <span x-show="!scanning" style="display:flex; align-items:center; gap:6px;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5,3 19,12 5,21"/></svg>
-          Start Scan
-        </span>
-        <span x-show="scanning" style="display:flex; align-items:center; gap:6px;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>
-          Starting…
-        </span>
+
+    <!-- Mode toggle: Scan Project | Scan PR -->
+    <div style="display:flex; gap:0; margin-bottom:20px; border:1px solid var(--border); border-radius:8px; overflow:hidden; width:fit-content;">
+      <button @click="scanMode='project'"
+        :style="scanMode==='project' ? 'background:rgba(249,115,22,.15);color:#f97316;border-color:#f97316;' : 'background:transparent;color:var(--muted);'"
+        style="padding:7px 18px; font-size:12px; font-weight:600; border:none; cursor:pointer; display:flex; align-items:center; gap:6px; transition:all .15s;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Scan Project
+      </button>
+      <button @click="scanMode='pr'; estimate=null"
+        :style="scanMode==='pr' ? 'background:rgba(249,115,22,.15);color:#f97316;border-color:#f97316;' : 'background:transparent;color:var(--muted);'"
+        style="padding:7px 18px; font-size:12px; font-weight:600; border:none; border-left:1px solid var(--border); cursor:pointer; display:flex; align-items:center; gap:6px; transition:all .15s;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
+        Scan PR
       </button>
     </div>
 
-    <!-- Cost estimate banner -->
-    <div x-show="estimate && !scanning" x-cloak style="margin-top:14px; padding:12px 16px; background:rgba(249,115,22,.07); border:1px solid rgba(249,115,22,.2); border-radius:8px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-      <div style="display:flex; align-items:center; gap:10px;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        <span style="font-size:12px; color:var(--text);">
-          Estimated cost: <strong x-text="'$' + (estimate.total_usd || 0).toFixed(3)" style="color:#f97316;"></strong>
-          &nbsp;·&nbsp; <span x-text="estimate.java_files || 0"></span> Java files
-          &nbsp;·&nbsp; <span x-text="(estimate.agent_count || 0) + ' agents'"></span>
-          <span x-show="estimate.breakdown" x-cloak style="color:var(--muted);">&nbsp;(<span x-text="estimate.breakdown"></span>)</span>
-        </span>
+    <!-- ── PROJECT SCAN ── -->
+    <div x-show="scanMode==='project'">
+      <div style="display:flex; gap:12px; align-items:flex-end;">
+        <div style="flex:1;">
+          <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:8px;">
+            GitHub Repository URL or Local Path
+          </label>
+          <input
+            x-model="repoUrl"
+            type="text"
+            placeholder="https://github.com/owner/my-spring-app  or  /Users/me/projects/api-service"
+            class="si-input"
+            @keydown.enter="startScan()"
+            @blur="repoUrl.trim() && estimateCost()"
+            :disabled="scanning"
+          >
+        </div>
+        <!-- Branch input (shown for GitHub URLs) -->
+        <div x-show="isGithubUrl(repoUrl)" x-cloak style="width:160px;">
+          <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:8px;">Branch</label>
+          <input x-model="branch" type="text" placeholder="main (default)"
+                 class="si-input" :disabled="scanning"
+                 style="height:40px; font-size:13px;">
+        </div>
+        <button class="btn-primary" @click="startScan()" :disabled="scanning || !repoUrl.trim()">
+          <span x-show="!scanning" style="display:flex; align-items:center; gap:6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5,3 19,12 5,21"/></svg>
+            Start Scan
+          </span>
+          <span x-show="scanning" style="display:flex; align-items:center; gap:6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>
+            Starting…
+          </span>
+        </button>
       </div>
-      <div style="display:flex; align-items:center; gap:8px;">
-        <label style="font-size:11px; color:var(--muted); white-space:nowrap;">Budget cap (USD):</label>
-        <input x-model.number="budget" type="number" min="0.01" step="0.10" placeholder="no limit"
-               style="width:90px; padding:4px 8px; background:var(--surface); border:1px solid var(--border); border-radius:5px; color:var(--text); font-size:12px;"
-               :disabled="scanning">
-      </div>
-    </div>
 
-    <!-- Advanced options (collapsible) -->
-    <div style="margin-top:12px;">
-      <button @click="showAdvanced = !showAdvanced" style="background:none; border:none; cursor:pointer; color:var(--muted); font-size:11px; display:flex; align-items:center; gap:5px; padding:0;">
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-             :style="showAdvanced ? 'transform:rotate(90deg);transition:transform 0.15s' : 'transition:transform 0.15s'">
-          <polyline points="9,18 15,12 9,6"/>
-        </svg>
-        Advanced options
-      </button>
-      <div x-show="showAdvanced" x-cloak style="margin-top:10px; padding:14px 16px; background:var(--surface-1); border:1px solid var(--border); border-radius:8px; display:flex; gap:24px; flex-wrap:wrap;">
-        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; color:var(--text);">
-          <input type="checkbox" x-model="useScope" style="accent-color:#f97316;">
-          Smart file scoping <span style="color:var(--muted); font-size:11px;">(skip irrelevant files per agent)</span>
-        </label>
-        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; color:var(--text);">
-          <input type="checkbox" x-model="useIncremental" style="accent-color:#f97316;">
-          Incremental scanning <span style="color:var(--muted); font-size:11px;">(skip unchanged files since last scan)</span>
-        </label>
+      <!-- Cost estimate banner -->
+      <div x-show="estimate && !scanning" x-cloak style="margin-top:14px; padding:12px 16px; background:rgba(249,115,22,.07); border:1px solid rgba(249,115,22,.2); border-radius:8px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span style="font-size:12px; color:var(--text);">
+            Estimated cost: <strong x-text="'$' + (estimate.total_usd || 0).toFixed(3)" style="color:#f97316;"></strong>
+            &nbsp;·&nbsp; <span x-text="estimate.java_files || 0"></span> Java files
+            &nbsp;·&nbsp; <span x-text="(estimate.agent_count || 0) + ' agents'"></span>
+          </span>
+        </div>
         <div style="display:flex; align-items:center; gap:8px;">
-          <label style="font-size:12px; color:var(--text); white-space:nowrap;">Budget strategy:</label>
-          <select x-model="budgetStrategy" style="background:var(--surface); border:1px solid var(--border); border-radius:5px; color:var(--text); font-size:12px; padding:4px 8px;">
-            <option value="value">Value (phase order)</option>
-            <option value="security">Security first</option>
-            <option value="phase1">Phase 1 only</option>
-          </select>
+          <label style="font-size:11px; color:var(--muted); white-space:nowrap;">Budget cap ($):</label>
+          <input x-model.number="budget" type="number" min="0.01" step="0.10" placeholder="no limit"
+                 style="width:90px; padding:4px 8px; background:var(--surface); border:1px solid var(--border); border-radius:5px; color:var(--text); font-size:12px;"
+                 :disabled="scanning">
+        </div>
+      </div>
+
+      <!-- Advanced options -->
+      <div style="margin-top:12px;">
+        <button @click="showAdvanced = !showAdvanced" style="background:none; border:none; cursor:pointer; color:var(--muted); font-size:11px; display:flex; align-items:center; gap:5px; padding:0;">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+               :style="showAdvanced ? 'transform:rotate(90deg);transition:transform 0.15s' : 'transition:transform 0.15s'">
+            <polyline points="9,18 15,12 9,6"/>
+          </svg>
+          Advanced options
+        </button>
+        <div x-show="showAdvanced" x-cloak style="margin-top:10px; padding:14px 16px; background:var(--surface-1); border:1px solid var(--border); border-radius:8px; display:flex; gap:24px; flex-wrap:wrap;">
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; color:var(--text);">
+            <input type="checkbox" x-model="useScope" style="accent-color:#f97316;">
+            Smart file scoping <span style="color:var(--muted); font-size:11px;">(skip irrelevant files per agent)</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; color:var(--text);">
+            <input type="checkbox" x-model="useIncremental" style="accent-color:#f97316;">
+            Incremental scanning <span style="color:var(--muted); font-size:11px;">(skip unchanged files since last scan)</span>
+          </label>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <label style="font-size:12px; color:var(--text); white-space:nowrap;">Budget strategy:</label>
+            <select x-model="budgetStrategy" style="background:var(--surface); border:1px solid var(--border); border-radius:5px; color:var(--text); font-size:12px; padding:4px 8px;">
+              <option value="value">Value (phase order)</option>
+              <option value="security">Security first</option>
+              <option value="phase1">Phase 1 only</option>
+            </select>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Error state -->
+    <!-- ── PR SCAN ── -->
+    <div x-show="scanMode==='pr'">
+      <!-- Info banner if no token -->
+      <div x-show="!hasGithubToken" x-cloak style="margin-bottom:14px; padding:10px 14px; background:rgba(249,115,22,.07); border:1px solid rgba(249,115,22,.2); border-radius:7px; font-size:12px; color:var(--text); display:flex; align-items:center; gap:8px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        GitHub token required.
+        <a href="/settings/github" style="color:#f97316; text-decoration:none; font-weight:600;">Set it up in Settings → GitHub PR →</a>
+      </div>
+
+      <div style="display:flex; gap:12px; align-items:flex-end;">
+        <div style="flex:1;">
+          <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:8px;">
+            GitHub Pull Request URL
+          </label>
+          <input
+            x-model="prUrl"
+            type="text"
+            placeholder="https://github.com/owner/repo/pull/123"
+            class="si-input"
+            @keydown.enter="startPrScan()"
+            @input="prPreview = null; prError = ''"
+            :disabled="scanning"
+          >
+        </div>
+        <button class="btn-primary" @click="startPrScan()" :disabled="scanning || !prUrl.trim()">
+          <span x-show="!scanning" style="display:flex; align-items:center; gap:6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
+            Scan PR
+          </span>
+          <span x-show="scanning" style="display:flex; align-items:center; gap:6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>
+            Starting…
+          </span>
+        </button>
+      </div>
+
+      <!-- PR preview after fetch -->
+      <div x-show="prPreview" x-cloak style="margin-top:12px; padding:10px 14px; background:rgba(34,197,94,.05); border:1px solid rgba(34,197,94,.2); border-radius:7px; font-size:12px; color:var(--text);">
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
+          <strong x-text="prPreview && prPreview.title"></strong>
+          &nbsp;·&nbsp;
+          <span style="font-family:monospace; color:var(--orange);" x-text="prPreview && prPreview.head_ref"></span>
+          &nbsp;·&nbsp;
+          <span x-text="(prPreview && prPreview.java_files) + ' Java file(s) changed'"></span>
+        </div>
+      </div>
+
+      <div style="margin-top:12px; font-size:11px; color:var(--muted);">
+        Scans the PR branch with all enabled agents and shows live progress. A findings summary is auto-posted as a PR comment when done.
+      </div>
+    </div>
+
+    <!-- Error state (both modes) -->
     <div x-show="error" x-cloak style="margin-top:12px; padding:10px 14px; background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.2); border-radius:6px; color:#f87171; font-size:13px;" x-text="error"></div>
 
-    <!-- All agents info -->
+    <!-- Active agents -->
     <div style="margin-top:16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
       <span style="font-size:11px; color:var(--muted);">Active agents:</span>
       <span class="badge badge-green">A03 CVE Scanner</span>
@@ -258,7 +336,11 @@
 <script>
 function dashboard() {
   return {
+    // mode: 'project' | 'pr'
+    scanMode: 'project',
+    // project scan
     repoUrl: '',
+    branch: '',
     scanning: false,
     error: '',
     estimate: null,
@@ -268,7 +350,26 @@ function dashboard() {
     useScope: true,
     useIncremental: true,
     showAdvanced: false,
-    _estimateTimer: null,
+    // PR scan
+    prUrl: '',
+    prPreview: null,
+    // github token presence (checked on load)
+    hasGithubToken: true,
+
+    async init() {
+      // Check if GitHub token is configured
+      try {
+        const r = await fetch('/api/settings/github/status');
+        if (r.ok) {
+          const d = await r.json();
+          this.hasGithubToken = !!d.connected;
+        }
+      } catch(e) {}
+    },
+
+    isGithubUrl(url) {
+      return /^https?:\/\/(github|gitlab|bitbucket)\./i.test(url.trim());
+    },
 
     async estimateCost() {
       const url = this.repoUrl.trim();
@@ -284,7 +385,7 @@ function dashboard() {
           this.estimate = await res.json();
         }
       } catch (e) {
-        // silently ignore estimate failures
+        // silently ignore
       } finally {
         this.estimating = false;
       }
@@ -302,9 +403,8 @@ function dashboard() {
           use_incremental: this.useIncremental,
           budget_strategy: this.budgetStrategy,
         };
-        if (this.budget && this.budget > 0) {
-          payload.budget = parseFloat(this.budget);
-        }
+        if (this.branch.trim()) payload.branch = this.branch.trim();
+        if (this.budget && this.budget > 0) payload.budget = parseFloat(this.budget);
         const res = await fetch('/api/scan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -317,6 +417,37 @@ function dashboard() {
           return;
         }
         window.location.href = data.redirect;
+      } catch (e) {
+        this.error = 'Network error: ' + e.message;
+        this.scanning = false;
+      }
+    },
+
+    async startPrScan() {
+      const url = this.prUrl.trim();
+      if (!url) { this.error = 'Please enter a GitHub PR URL.'; return; }
+      if (!/github\.com\/.+\/pull\/\d+/.test(url)) {
+        this.error = 'Invalid PR URL. Expected: https://github.com/owner/repo/pull/123';
+        return;
+      }
+      this.error = '';
+      this.scanning = true;
+      this.prPreview = null;
+      try {
+        const res = await fetch('/api/github/scan-pr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pr_url: url }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          this.error = data.error || 'Failed to start PR scan.';
+          this.scanning = false;
+          return;
+        }
+        // Brief preview before redirect
+        this.prPreview = { title: data.pr_title, head_ref: data.head_ref, java_files: data.java_files };
+        setTimeout(() => { window.location.href = data.redirect; }, 800);
       } catch (e) {
         this.error = 'Network error: ' + e.message;
         this.scanning = false;

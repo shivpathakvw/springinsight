@@ -44,6 +44,11 @@
         <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px;">Elapsed</div>
         <div style="font-size:24px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--text);" x-text="elapsedTime()"></div>
       </div>
+      <!-- Cost card — shown once we have an estimate -->
+      <div class="card" x-show="totalCostUsd > 0" x-cloak style="padding:10px 16px; text-align:center; min-width:80px;">
+        <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px;">Est. Cost</div>
+        <div style="font-size:24px; font-weight:700; font-variant-numeric:tabular-nums; color:#f97316;" x-text="'$' + totalCostUsd.toFixed(3)"></div>
+      </div>
     </div>
   </div>
 
@@ -143,6 +148,9 @@
             Found <strong style="color:var(--text);" x-text="state.findings_count"></strong> issues across
             <strong style="color:var(--text);" x-text="completedCount()"></strong> agents in
             <strong style="color:var(--text);" x-text="elapsedTime()"></strong>
+            <span x-show="totalCostUsd > 0" x-cloak>
+              &nbsp;·&nbsp; Est. cost: <strong style="color:#f97316;" x-text="'$' + totalCostUsd.toFixed(3)"></strong>
+            </span>
           </div>
         </div>
         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
@@ -156,16 +164,42 @@
             <a :href="'/scans/{{ run_id }}/report'" class="btn-primary" style="text-decoration:none;">
               View Full Report →
             </a>
-            <a :href="'/api/runs/{{ run_id }}/export/pdf'" download
-               style="display:inline-flex; align-items:center; gap:6px; background:transparent; border:1px solid var(--border); color:var(--muted); border-radius:7px; padding:10px 16px; font-size:14px; text-decoration:none; transition:all 0.15s;"
-               onmouseover="this.style.borderColor='var(--orange)';this.style.color='var(--orange)'"
+            <button @click="exportPdf()"
+               :disabled="pdfExporting"
+               style="display:inline-flex; align-items:center; gap:6px; background:transparent; border:1px solid var(--border); color:var(--muted); border-radius:7px; padding:10px 16px; font-size:14px; cursor:pointer; transition:all 0.15s;"
+               onmouseover="if(!this.disabled){this.style.borderColor='var(--orange)';this.style.color='var(--orange)'}"
                onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Export PDF
-            </a>
+              <svg x-show="!pdfExporting" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <svg x-show="pdfExporting" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>
+              <span x-text="pdfExporting ? 'Generating…' : 'Export PDF'"></span>
+            </button>
           </div>
         </div>
       </div>
+
+      <!-- Per-agent cost breakdown (shown when cost data available) -->
+      <div x-show="agentCosts.length > 0" x-cloak style="margin-top:16px; border-top:1px solid rgba(255,255,255,.06); padding-top:14px;">
+        <div style="font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:10px;">Token Cost Breakdown</div>
+        <div style="display:flex; flex-wrap:wrap; gap:8px;">
+          <template x-for="ac in agentCosts" :key="ac.id">
+            <div style="display:flex; align-items:center; gap:8px; background:var(--surface-1); border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-size:12px;">
+              <span style="font-family:monospace; color:var(--muted);" x-text="ac.id"></span>
+              <span style="color:var(--text);" x-text="ac.name"></span>
+              <span class="badge" :class="modelBadgeClass(ac.model)" x-text="modelShort(ac.model)"></span>
+              <span style="font-family:monospace; color:#f97316; font-weight:600;" x-text="'$' + ac.cost.toFixed(3)"></span>
+              <span x-show="ac.files > 0" style="color:var(--muted); font-size:11px;" x-text="ac.files + ' files'"></span>
+            </div>
+          </template>
+        </div>
+        <div x-show="totalCostUsd > 0" style="margin-top:8px; font-size:12px; color:var(--muted);">
+          Total: <strong style="color:#f97316;" x-text="'$' + totalCostUsd.toFixed(4)"></strong>
+          &nbsp;·&nbsp; <span x-text="state.total_java_files || 0"></span> Java files
+          &nbsp;·&nbsp; Estimates based on file count and model pricing
+        </div>
+      </div>
+
+      <!-- PDF error message -->
+      <div x-show="pdfError" x-cloak style="margin-top:12px; padding:10px 14px; background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.2); border-radius:6px; color:#f87171; font-size:12px;" x-text="pdfError"></div>
     </div>
   </div>
 
@@ -228,6 +262,12 @@ function liveScan() {
     elapsedSecs: 0,
     _timer: null,
     _es: null,
+    // Cost tracking
+    totalCostUsd: 0,
+    agentCosts: [],      // [{id, name, model, cost, files}]
+    // PDF export
+    pdfExporting: false,
+    pdfError: '',
 
     get filteredLog() {
       if (this.showAgentLogs) return this.eventLog;
@@ -236,6 +276,8 @@ function liveScan() {
 
     init() {
       this._timer = setInterval(() => this.elapsedSecs++, 1000);
+      // Fetch cost estimate for this project once we have the repo url
+      this._fetchCostEstimate();
       this._es = new EventSource(`/api/runs/${RUN_ID}/stream`);
       this._es.onmessage = (e) => {
         try { this.handleEvent(JSON.parse(e.data)); } catch(ex) {}
@@ -298,6 +340,8 @@ function liveScan() {
         if (evt.agent_findings) this.state.agent_findings = evt.agent_findings;
         clearInterval(this._timer);
         this._es.close();
+        // Refresh cost estimate with actual file counts now that scan is done
+        this._fetchCostEstimate();
 
       } else if (evt.type === 'scan_failed') {
         this.state.status = 'failed';
@@ -401,6 +445,72 @@ function liveScan() {
       if (type === 'agent_log')       return 'color:var(--muted); opacity:.7';
       if (type === 'findings_update') return 'color:var(--orange)';
       return 'color:var(--text)';
+    },
+
+    // ── Cost estimation ────────────────────────────────────────────────────
+    async _fetchCostEstimate() {
+      const repoUrl = this.state.repo_url || INITIAL_STATE.repo_url;
+      if (!repoUrl) return;
+      try {
+        const res = await fetch('/api/scan/estimate', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({repo_url: repoUrl}),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        this.totalCostUsd = data.total_usd || 0;
+        // Build per-agent cost list
+        this.agentCosts = (data.per_agent || []).map(a => ({
+          id: a.id,
+          name: a.name,
+          model: a.model,
+          cost: a.cost_usd || 0,
+          files: (this.state.agent_java_files && this.state.agent_java_files[a.id]) || 0,
+        }));
+      } catch(e) { /* silently ignore */ }
+    },
+
+    // ── PDF export (fetch+blob — avoids downloading error JSON as pdf.json) ─
+    async exportPdf() {
+      this.pdfExporting = true;
+      this.pdfError = '';
+      try {
+        const res = await fetch(`/api/runs/${RUN_ID}/export/pdf`);
+        if (!res.ok) {
+          let msg = `PDF export failed (${res.status})`;
+          try {
+            const err = await res.json();
+            msg = err.detail || msg;
+          } catch(e) {}
+          if (res.status === 501) {
+            msg = 'PDF export requires reportlab. Run: pip install "springinsight[pdf]"';
+          }
+          this.pdfError = msg;
+          return;
+        }
+        // Check content type is actually PDF
+        const ct = res.headers.get('content-type') || '';
+        if (!ct.includes('pdf')) {
+          this.pdfError = 'Server returned unexpected content. Is reportlab installed?';
+          return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        // Extract filename from Content-Disposition or fall back to a sensible default
+        const cd = res.headers.get('content-disposition') || '';
+        const match = cd.match(/filename="?([^";]+)"?/);
+        a.download = match ? match[1] : `springinsight-${RUN_ID}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+      } catch(e) {
+        this.pdfError = 'Network error: ' + e.message;
+      } finally {
+        this.pdfExporting = false;
+      }
     },
   };
 }
