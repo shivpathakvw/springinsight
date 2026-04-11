@@ -133,9 +133,11 @@ AGENT_REGISTRY: dict[str, AgentMeta] = {
         model="claude-opus-4-6",
         phase=3,
         skill_file="a05-architecture/SKILL.md",
-        description="SOLID, layering, coupling, microservices fitness, ADR generation.",
+        description=(
+            "SOLID at architecture level, layer violations, coupling matrix, "
+            "microservices fitness score, ADR generation for critical decisions."
+        ),
         requires=["A01", "A02", "A04"],
-        enabled=False,
     ),
     "A08": AgentMeta(
         id="A08",
@@ -143,8 +145,10 @@ AGENT_REGISTRY: dict[str, AgentMeta] = {
         model="claude-opus-4-6",
         phase=3,
         skill_file="a08-lld/SKILL.md",
-        description="Class diagrams, sequence diagrams, component maps (PlantUML/Mermaid).",
-        enabled=False,
+        description=(
+            "Class diagrams, ER diagrams, sequence diagrams, component maps, "
+            "API surface table and Spring bean wiring — all in Mermaid."
+        ),
     ),
     "A06": AgentMeta(
         id="A06",
@@ -152,9 +156,11 @@ AGENT_REGISTRY: dict[str, AgentMeta] = {
         model="claude-sonnet-4-6",
         phase=4,
         skill_file="a06-test-generator/SKILL.md",
-        description="Generates JUnit 5 + Mockito test classes for uncovered critical paths.",
+        description=(
+            "Generates JUnit 5 + Mockito unit tests and @WebMvcTest controller tests "
+            "for uncovered critical paths found by A01 and A02."
+        ),
         requires=["A01", "A02"],
-        enabled=False,
     ),
     "A07": AgentMeta(
         id="A07",
@@ -162,9 +168,11 @@ AGENT_REGISTRY: dict[str, AgentMeta] = {
         model="claude-sonnet-4-6",
         phase=4,
         skill_file="a07-feature-docs/SKILL.md",
-        description="Feature specs, API docs, developer guides, sequence diagrams.",
+        description=(
+            "Feature specs, REST API reference, developer onboarding guide, "
+            "sequence diagrams, and common developer task walkthroughs."
+        ),
         requires=["A08"],
-        enabled=False,
     ),
     "A09": AgentMeta(
         id="A09",
@@ -177,7 +185,12 @@ AGENT_REGISTRY: dict[str, AgentMeta] = {
 }
 
 # Ordered list for phase-based execution
-PHASE_ORDER = {1: ["A03", "A10", "A12"], 2: ["A01", "A02", "A04", "A09", "A11", "A13", "A14", "A15"], 3: ["A05", "A08"], 4: ["A06", "A07"]}
+PHASE_ORDER = {
+    1: ["A03", "A10", "A12"],
+    2: ["A01", "A02", "A04", "A09", "A11", "A13", "A14", "A15"],
+    3: ["A05", "A08"],
+    4: ["A06", "A07"],
+}
 
 
 def get_agent(agent_id: str) -> AgentMeta | None:

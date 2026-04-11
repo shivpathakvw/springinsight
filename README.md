@@ -177,12 +177,12 @@ The context is injected into every agent's prompt — this is what makes SpringI
 | A13 | API Design Auditor | Sonnet | 2 | ✅ Live | REST compliance, @Valid missing, pagination, OpenAPI gaps |
 | A14 | Concurrency Audit | Sonnet | 2 | ✅ Live | Race conditions, @Transactional correctness, ThreadLocal leaks |
 | A15 | Dependency Graph | Sonnet | 2 | ✅ Live | Circular deps, hot-spots, God classes, Mermaid diagrams |
-| A05 | Architecture Review | Opus | 3 | 🔜 Soon | Coupling, layering violations, microservices fitness, ADRs |
-| A08 | LLD Generator | Opus | 3 | 🔜 Soon | Class/sequence/component diagrams in PlantUML + Mermaid |
-| A06 | Test Generator | Sonnet | 4 | 🔜 Soon | JUnit 5 + Mockito tests for uncovered critical paths |
-| A07 | Feature Docs | Sonnet | 4 | 🔜 Soon | Feature specs, API reference docs, developer guides |
+| A05 | Architecture Review | Opus | 3 | ✅ Live | SOLID at architecture level, layer violations, coupling matrix, ADRs |
+| A08 | LLD Generator | Opus | 3 | ✅ Live | Class diagrams, ER diagrams, sequence diagrams, API table (Mermaid) |
+| A06 | Test Generator | Sonnet | 4 | ✅ Live | JUnit 5 + Mockito tests, @WebMvcTest, @DataJpaTest, security tests |
+| A07 | Feature Docs | Sonnet | 4 | ✅ Live | Feature specs, REST API reference, developer onboarding guide |
 
-> **Phase 1 (3 agents) and Phase 2 (8 agents) are live.** Phase 3–4 coming in the next releases.
+> **All 15 agents across Phases 1–4 are live.** Run `springinsight agents` to see the full list.
 
 ---
 
@@ -261,10 +261,10 @@ A full Phase 1 scan of a mid-size project typically costs **less than $0.05**.
 
 - [x] Phase 1: CVE scanner, dead code detector, config review (A03, A10, A12)
 - [x] Phase 2: Deep code review, OWASP security, DB/JPA, PR review, performance, API audit, concurrency, dependency graph (A01–A04, A09, A11, A13–A15)
+- [x] Phase 3: Architecture review with ADR generation, full LLD generation with Mermaid (A05, A08)
+- [x] Phase 4: JUnit 5 test generation, feature docs + developer guide generation (A06, A07)
 - [x] Product website (GitHub Pages) — [shivpathakvw.github.io/springinsight](https://shivpathakvw.github.io/springinsight)
-- [x] PyPI publishing with OIDC trusted publishing
-- [ ] Phase 3: Architecture review, LLD generator (A05, A08)
-- [ ] Phase 4: Test generator, feature documentation (A06, A07)
+- [x] PyPI publishing with OIDC trusted publishing (push a tag → auto-publishes)
 - [ ] GitHub Actions integration (`springinsight-action` marketplace)
 - [ ] VS Code extension (findings as CodeLens annotations)
 - [ ] MCP server (Claude Code / Cursor / Cline integration)

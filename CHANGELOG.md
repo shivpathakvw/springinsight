@@ -5,6 +5,38 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semantic Ve
 
 ---
 
+## [0.3.0] — 2026-04-11
+
+### Added
+**Phase 3 agents — Opus architecture-level synthesis**
+- **A05 Architecture Review** — SOLID at architecture level, layer violation detection
+  (controller→repository bypass), coupling matrix (Ca/Ce/Instability per module),
+  microservices fitness score (0–5), domain model evaluation (anemic model, bounded context gaps),
+  Architectural Decision Records (ADRs) for every CRITICAL + top HIGH findings
+- **A08 LLD Generator** — Full Mermaid documentation suite: class diagrams (with JPA relationships),
+  ER diagrams, sequence diagrams for top 5–8 business flows, component/architecture diagram,
+  API surface table (method/path/auth/request/response), Spring bean wiring diagram,
+  exception hierarchy, developer guide
+
+**Phase 4 agents — Sonnet generation**
+- **A06 Test Generator** — JUnit 5 + Mockito unit tests (`@ExtendWith(MockitoExtension.class)`),
+  `@WebMvcTest` controller tests with MockMvc, `@DataJpaTest` for custom repository queries,
+  security tests for IDOR/auth findings from A02, generated as compilable source files
+- **A07 Feature Documentation** — Per-feature specs with API reference tables, request/response
+  examples, business logic documentation, Mermaid sequence diagrams, data model tables,
+  developer task walkthroughs, comprehensive `DEVELOPER_GUIDE.md`
+
+### Changed
+- All 15 agents now enabled — `springinsight agents` shows ✅ for everything
+- CLI footer updated to show all four phases with their agent IDs
+- README updated: all agents marked ✅ Live in the agent reference table
+- Roadmap updated to mark Phase 3 and 4 as complete
+
+All notable changes to SpringInsight are documented here.
+Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · [Semantic Versioning](https://semver.org/)
+
+---
+
 ## [0.2.0] — 2026-04-11
 
 ### Added

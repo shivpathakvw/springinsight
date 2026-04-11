@@ -181,9 +181,10 @@ def agents_cmd():
     console.print()
     console.print(table)
     console.print()
-    console.print("[dim]Phase 1 — Haiku (fast): A03, A10, A12[/dim]")
-    console.print("[dim]Phase 2 — Sonnet (deep): A01, A02, A04, A09, A11, A13, A14[/dim]")
-    console.print("[dim]Phase 3-4 — Opus + generation agents coming soon.[/dim]\n")
+    console.print("[dim]Phase 1 — Haiku  (fast scan):    A03, A10, A12[/dim]")
+    console.print("[dim]Phase 2 — Sonnet (deep analysis): A01, A02, A04, A09, A11, A13, A14, A15[/dim]")
+    console.print("[dim]Phase 3 — Opus   (architecture):  A05, A08[/dim]")
+    console.print("[dim]Phase 4 — Sonnet (generation):    A06, A07[/dim]\n")
 
 
 if __name__ == "__main__":
