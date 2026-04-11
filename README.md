@@ -12,7 +12,7 @@ SpringInsight runs a fleet of AI agents over your Spring Boot project — simult
 [![GitHub stars](https://img.shields.io/github/stars/shivpathakvw/springinsight?style=flat-square&color=f97316)](https://github.com/shivpathakvw/springinsight/stargazers)
 [![CI](https://img.shields.io/github/actions/workflow/status/shivpathakvw/springinsight/ci.yml?style=flat-square&label=CI)](https://github.com/shivpathakvw/springinsight/actions)
 
-**[🌐 Website](https://shivpathakvw.github.io/springinsight)** · **[📦 PyPI](https://pypi.org/project/springinsight/)** · **[⭐ Star on GitHub](https://github.com/shivpathakvw/springinsight)**
+**[🌐 Website](https://springinsight.vercel.app)** · **[📦 PyPI](https://pypi.org/project/springinsight/)** · **[⭐ Star on GitHub](https://github.com/shivpathakvw/springinsight)**
 
 ---
 
@@ -263,7 +263,7 @@ A full Phase 1 scan of a mid-size project typically costs **less than $0.05**.
 - [x] Phase 2: Deep code review, OWASP security, DB/JPA, PR review, performance, API audit, concurrency, dependency graph (A01–A04, A09, A11, A13–A15)
 - [x] Phase 3: Architecture review with ADR generation, full LLD generation with Mermaid (A05, A08)
 - [x] Phase 4: JUnit 5 test generation, feature docs + developer guide generation (A06, A07)
-- [x] Product website (GitHub Pages) — [shivpathakvw.github.io/springinsight](https://shivpathakvw.github.io/springinsight)
+- [x] Product website — [springinsight.vercel.app](https://springinsight.vercel.app)
 - [x] PyPI publishing with OIDC trusted publishing (push a tag → auto-publishes)
 - [ ] GitHub Actions integration (`springinsight-action` marketplace)
 - [ ] VS Code extension (findings as CodeLens annotations)

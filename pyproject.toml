@@ -80,7 +80,7 @@ all = [
 springinsight = "springinsight.main:cli"
 
 [project.urls]
-Homepage = "https://shivpathakvw.github.io/springinsight"
+Homepage = "https://springinsight.vercel.app"
 Documentation = "https://github.com/shivpathakvw/springinsight#readme"
 Repository = "https://github.com/shivpathakvw/springinsight"
 "Bug Tracker" = "https://github.com/shivpathakvw/springinsight/issues"

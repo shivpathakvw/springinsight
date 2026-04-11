@@ -75,7 +75,7 @@ Web UI (springinsight web):
 - Score dashboard and filterable findings table
 - Persistent run history via SQLite
 
-Product website: docs/index.html (GitHub Pages)
+Product website: docs/index.html (deployed at springinsight.vercel.app)
 - Full landing page: agents, intelligence layers, comparison table, pricing
 
 PyPI publishing:
@@ -87,14 +87,8 @@ Author: Shiv Chandra Pathak <shivchandrapathak@gmail.com>
 EOF
 )"
 
-# Enable GitHub Pages (if you haven't already, go to repo Settings → Pages →
-# Source: Deploy from a branch → Branch: main, /docs)
 echo ""
-echo "→ Next steps for GitHub Pages:"
-echo "   1. Go to https://github.com/shivpathakvw/springinsight/settings/pages"
-echo "   2. Source: Deploy from a branch"
-echo "   3. Branch: main, Folder: /docs"
-echo "   4. Site will be at: https://shivpathakvw.github.io/springinsight"
+echo "→ Website is live at: https://springinsight.vercel.app"
 echo ""
 
 # Set remote
@@ -110,5 +104,5 @@ git push -u origin main
 echo ""
 echo "✅ Done! SpringInsight is live:"
 echo "   📦 GitHub:  https://github.com/shivpathakvw/springinsight"
-echo "   🌐 Website: https://shivpathakvw.github.io/springinsight  (after Pages setup)"
+echo "   🌐 Website: https://springinsight.vercel.app"
 echo "   🚀 PyPI:    Push tag v0.2.0 to publish → git tag v0.2.0 && git push origin v0.2.0"

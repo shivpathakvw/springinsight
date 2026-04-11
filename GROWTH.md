@@ -43,7 +43,7 @@ Phase 2 (Sonnet, deep): 8 more agents including full security + concurrency audi
 pip install springinsight (MIT, requires ANTHROPIC_API_KEY)
 
 GitHub: https://github.com/shivpathakvw/springinsight
-Demo / website: https://shivpathakvw.github.io/springinsight
+Demo / website: https://springinsight.vercel.app
 ```
 
 **Tips for HN:**
@@ -194,7 +194,7 @@ The agents understand Spring Boot idioms that generic tools miss:
 MIT license. pip install springinsight.
 
 🔗 GitHub: https://github.com/shivpathakvw/springinsight
-🌐 Website: https://shivpathakvw.github.io/springinsight
+🌐 Website: https://springinsight.vercel.app
 
 What Spring Boot bug do you find yourself catching in every code review?
 Drop it in the comments — I'll build an agent for it. 👇
@@ -246,7 +246,7 @@ Tweet 5:
 🌐 Web UI: springinsight web --open
 
 GitHub: https://github.com/shivpathakvw/springinsight
-Website: https://shivpathakvw.github.io/springinsight
+Website: https://springinsight.vercel.app
 
 What Spring Boot bug should I build an agent for next? 👇
 ```
