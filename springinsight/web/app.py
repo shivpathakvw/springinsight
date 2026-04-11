@@ -943,8 +943,13 @@ async def api_scan_pr(request: Request):
     pr_title = pr.get("title", f"PR #{pr_number}")
 
     try:
-        changed_files = await get_pr_changed_files(token, full_name, pr_number)
-        java_files = [f for f in changed_files if f.endswith(".java")]
+        changed_files_info = await get_pr_changed_files(token, full_name, pr_number)
+        # changed_files_info is a list of dicts with keys: filename, status, additions, etc.
+        java_files = [
+            f["filename"] for f in changed_files_info
+            if isinstance(f, dict) and f.get("filename", "").endswith(".java")
+            and f.get("status") != "removed"
+        ]
     except Exception as exc:
         return JSONResponse({"error": f"Could not fetch changed files: {exc}"}, status_code=500)
 

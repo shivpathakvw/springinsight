@@ -69,8 +69,11 @@ async def list_open_prs(token: str, full_name: str) -> list[dict]:
         return resp.json()
 
 
-async def get_pr_changed_files(token: str, full_name: str, pr_number: int) -> list[str]:
-    """Return list of changed file paths in a PR."""
+async def get_pr_changed_files(token: str, full_name: str, pr_number: int) -> list[dict]:
+    """Return list of changed file info dicts in a PR.
+
+    Each dict has keys: filename, status (added|modified|removed|renamed), patch, additions, deletions.
+    """
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(
             f"{GITHUB_API}/repos/{full_name}/pulls/{pr_number}/files",
@@ -78,7 +81,55 @@ async def get_pr_changed_files(token: str, full_name: str, pr_number: int) -> li
             params={"per_page": 300},
         )
         resp.raise_for_status()
-        return [f["filename"] for f in resp.json()]
+        return resp.json()
+
+
+def build_pr_scope_block(
+    changed_java_files: list[str],
+    clone_dir: Path,
+    full_name: str,
+    pr_number: int,
+    pr_branch: str,
+) -> str:
+    """Build the =PR SCAN SCOPE= block injected into every agent prompt.
+
+    Tells agents to ONLY analyze the changed files and skip everything else.
+    This is the primary fix for the "PR scans entire codebase" bug.
+    """
+    abs_paths = []
+    for rel in changed_java_files:
+        abs_path = clone_dir / rel
+        # Use the absolute path if it exists, otherwise fall back to relative path
+        if abs_path.exists():
+            abs_paths.append(str(abs_path))
+        else:
+            # File was deleted in this PR — still mention it for context but mark as removed
+            abs_paths.append(f"{clone_dir / rel}  [REMOVED IN THIS PR]")
+
+    file_list = "\n".join(f"  - {p}" for p in abs_paths) if abs_paths else "  (none)"
+
+    return f"""
+=== PR SCAN SCOPE ===
+⚠️  CRITICAL — This is a Pull Request scan.
+    Repository : {full_name}
+    PR         : #{pr_number}
+    Branch     : {pr_branch}
+
+YOU MUST ONLY ANALYZE THE FOLLOWING {len(changed_java_files)} CHANGED JAVA FILE(S).
+Every other file in the repository is OUT OF SCOPE — skip them completely.
+
+Changed Java Files:
+{file_list}
+
+ABSOLUTE RULES:
+  1. Only read / analyse files from the list above.
+  2. Do NOT glob for *.java across the project — only examine the files listed.
+  3. Do NOT report findings on files outside this list.
+  4. Focus your analysis on what changed: correctness, security, performance.
+  5. Removed files (marked [REMOVED IN THIS PR]) should only be mentioned if they
+     leave behind a dangling dependency or caller.
+=== END PR SCOPE ===
+"""
 
 
 async def post_pr_comment(token: str, full_name: str, pr_number: int, body: str) -> dict:
@@ -202,6 +253,11 @@ def build_pr_comment(
 
 # ── Core PR scan orchestrator ─────────────────────────────────────────────────
 
+# Agents that are useful for a focused PR review (exclude full-project agents
+# that need the entire codebase: LLD, Architecture, Dead Code, Docs, Dep Graph)
+PR_AGENT_IDS = {"A01", "A02", "A03", "A04", "A09", "A11", "A12", "A13", "A14"}
+
+
 async def scan_pr(
     full_name: str,
     pr_number: int,
@@ -212,7 +268,13 @@ async def scan_pr(
     data_dir: Path,
     web_ui_url: str = "http://localhost:8765",
 ) -> str | None:
-    """Clone PR branch, run scan, post comment. Returns run_id or None."""
+    """Clone PR branch, run focused scan on changed files only, post comment.
+
+    Key fix: passes a PR scope block to agents so they ONLY analyse the
+    changed Java files — not the entire cloned repository.
+
+    Returns run_id or None.
+    """
     token = get_github_token()
     if not token:
         logger.error("No GitHub token configured")
@@ -255,8 +317,20 @@ async def scan_pr(
     ctx.name = full_name.split("/")[-1]
     ctx.base_path = str(clone_dir)
 
-    # Get enabled agents
-    agents = get_enabled_agents("all")
+    # Get only PR-relevant agents (skip full-project agents like LLD, Architecture, Dead Code)
+    all_agents = get_enabled_agents("all")
+    agents = [a for a in all_agents if a.id in PR_AGENT_IDS]
+    if not agents:
+        agents = all_agents  # fallback: use all if none match
+
+    # Build the PR scope block — restricts every agent to only changed files
+    pr_scope_block = build_pr_scope_block(
+        changed_java_files=changed_java_files,
+        clone_dir=clone_dir,
+        full_name=full_name,
+        pr_number=pr_number,
+        pr_branch=head_ref,
+    )
 
     import uuid
     run_id = str(uuid.uuid4())
@@ -290,8 +364,13 @@ async def scan_pr(
     )
     _active_scans[run_id] = state
 
-    # Run scan in background
-    asyncio.create_task(run_scan_background(state, ctx, clone_dir, data_dir, agents))
+    # Run scan in background — pass pr_scope_block so agents ONLY analyse changed files
+    asyncio.create_task(run_scan_background(
+        state, ctx, clone_dir, data_dir, agents,
+        use_file_scope=False,      # PR scope block overrides file scope
+        use_incremental=False,     # Always fresh scan for PRs
+        batch_scope_block=pr_scope_block,
+    ))
 
     # Mark PR as scanned (before comment, to prevent re-triggering)
     mark_pr_scanned(full_name, pr_number, head_sha, run_id)
@@ -376,13 +455,17 @@ async def poll_once(data_dir: Path, web_ui_url: str = "http://localhost:8765") -
             if was_pr_scanned(full_name, pr_number, head_sha):
                 continue
 
-            # Get changed Java files
+            # Get changed Java files (returns list of file-info dicts)
             try:
                 all_changed = await get_pr_changed_files(token, full_name, pr_number)
             except Exception:
                 all_changed = []
 
-            java_files = [f for f in all_changed if f.endswith(".java")]
+            java_files = [
+                f["filename"] for f in all_changed
+                if isinstance(f, dict) and f.get("filename", "").endswith(".java")
+                and f.get("status") != "removed"  # skip deleted files (nothing to scan)
+            ]
             if not java_files:
                 # Mark as scanned so we don't keep checking
                 mark_pr_scanned(full_name, pr_number, head_sha, "no-java-files")

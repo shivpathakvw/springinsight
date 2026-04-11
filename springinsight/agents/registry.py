@@ -182,12 +182,41 @@ AGENT_REGISTRY: dict[str, AgentMeta] = {
         skill_file="a09-pr-review/SKILL.md",
         description="Git diff analysis, blast radius, breaking change detection.",
     ),
+
+    # ── Phase 2: Enterprise / NFR agents ──────────────────────────────────
+    "A16": AgentMeta(
+        id="A16",
+        name="Spring Boot Upgrade Advisor",
+        model="claude-sonnet-4-6",
+        phase=2,
+        skill_file="a16-upgrade-advisor/SKILL.md",
+        description=(
+            "Detects the current Spring Boot version, identifies deprecated APIs, "
+            "breaking changes, and produces a step-by-step migration guide to the "
+            "latest stable release (3.5.x / 4.0). Covers Java baseline, Jakarta EE "
+            "namespace, removed properties, and changed auto-configurations."
+        ),
+    ),
+    "A17": AgentMeta(
+        id="A17",
+        name="NFR Optimizer",
+        model="claude-sonnet-4-6",
+        phase=2,
+        skill_file="a17-nfr-optimizer/SKILL.md",
+        description=(
+            "Focuses on non-functional requirements: identifies concurrency bottlenecks "
+            "(thread pool sizing, @Async misuse, virtual-thread opportunities), caching "
+            "gaps (missing @Cacheable, unbounded cache, eviction strategy), connection-pool "
+            "tuning (HikariCP, Feign, RestClient), GC pressure, memory leaks, and startup "
+            "time optimisation. Outputs prioritised remediation list with estimated impact."
+        ),
+    ),
 }
 
 # Ordered list for phase-based execution
 PHASE_ORDER = {
     1: ["A03", "A10", "A12"],
-    2: ["A01", "A02", "A04", "A09", "A11", "A13", "A14", "A15"],
+    2: ["A01", "A02", "A04", "A09", "A11", "A13", "A14", "A15", "A16", "A17"],
     3: ["A05", "A08"],
     4: ["A06", "A07"],
 }

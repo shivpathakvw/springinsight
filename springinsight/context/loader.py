@@ -6,6 +6,7 @@ tech stack, module structure, custom rules, exclusions, etc.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -109,11 +110,127 @@ class ProjectContext:
     _raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
 
+def detect_spring_boot_version(project_path: Path) -> str | None:
+    """Auto-detect Spring Boot version from pom.xml, build.gradle, or build.gradle.kts.
+
+    Returns version string like "3.5.0" or "4.0.0", or None if undetectable.
+    """
+    # ── pom.xml ──────────────────────────────────────────────────────────────
+    for pom in [project_path / "pom.xml", *project_path.glob("*/pom.xml")]:
+        if pom.exists():
+            try:
+                content = pom.read_text(encoding="utf-8", errors="ignore")
+                # Most common: spring-boot-starter-parent in <parent>
+                m = re.search(
+                    r"spring-boot-starter-parent.*?<version>\s*([0-9]+\.[0-9]+[^<]+)</version>",
+                    content, re.DOTALL | re.IGNORECASE,
+                )
+                if m:
+                    return m.group(1).strip()
+                # Fallback: spring.boot.version property
+                m = re.search(
+                    r"<spring[-.]boot\.version>\s*([0-9]+\.[0-9]+[^<]+)</spring",
+                    content, re.IGNORECASE,
+                )
+                if m:
+                    return m.group(1).strip()
+            except Exception:
+                pass
+
+    # ── build.gradle / build.gradle.kts ──────────────────────────────────────
+    for gradle in [
+        project_path / "build.gradle",
+        project_path / "build.gradle.kts",
+        *project_path.glob("*/build.gradle"),
+    ]:
+        if gradle.exists():
+            try:
+                content = gradle.read_text(encoding="utf-8", errors="ignore")
+                # Plugins DSL: id 'org.springframework.boot' version '3.5.0'
+                m = re.search(
+                    r"""id\s*['"(]org\.springframework\.boot['"]\)?\s+version\s+['"]([0-9]+\.[0-9]+[^'"]+)['"]""",
+                    content,
+                )
+                if m:
+                    return m.group(1).strip()
+                # Legacy: springBootVersion = '3.5.0'
+                m = re.search(r"springBootVersion\s*=\s*['\"]([0-9]+\.[0-9]+[^'\"]+)['\"]", content)
+                if m:
+                    return m.group(1).strip()
+            except Exception:
+                pass
+
+    return None
+
+
+def get_spring_boot_version_notes(version: str) -> str:
+    """Return version-specific guidance to inject into the agent context block."""
+    if not version:
+        return ""
+
+    major, minor = 3, 2
+    try:
+        parts = version.split(".")
+        major = int(parts[0])
+        minor = int(parts[1])
+    except Exception:
+        pass
+
+    notes: list[str] = []
+
+    if major >= 4:
+        notes += [
+            "⚠  Spring Boot 4.0: Jakarta EE 11, Spring Framework 7, Java 17+ required.",
+            "   @RequestMapping on interface default methods is now deprecated.",
+            "   HttpClient bean replaced with RestClient by default.",
+            "   spring-boot-parent no longer published — use BOM directly.",
+            "   Migrate from spring.factories to @AutoConfiguration.",
+        ]
+    elif major == 3:
+        if minor >= 5:
+            notes += [
+                "ℹ  Spring Boot 3.5: Structured logging (ECS/GELF/Logstash), WebClient builder API.",
+                "   heapdump actuator defaults to access=NONE — verify your config.",
+                "   TaskExecutor bean: use 'applicationTaskExecutor' name (not 'taskExecutor').",
+                "   Property validation: .enabled keys must be true/false only.",
+                "   Apache Pulsar upgraded to 4.0.x.",
+            ]
+        elif minor >= 4:
+            notes += [
+                "ℹ  Spring Boot 3.4: Virtual threads stable (Java 21+), RestClient GA.",
+                "   Micrometer 1.14, Spring Security 6.4.",
+                "   @ServiceConnection expanded to more connection types.",
+            ]
+        elif minor >= 3:
+            notes += [
+                "ℹ  Spring Boot 3.3: CDS (Class Data Sharing) support, @ConditionalOnThreading.",
+                "   Micrometer 1.13, Flyway 10+.",
+            ]
+        elif minor >= 2:
+            notes += [
+                "ℹ  Spring Boot 3.2: Virtual threads preview, RestClient introduced.",
+                "   spring.threads.virtual.enabled=true to enable Loom.",
+            ]
+        elif minor <= 1:
+            notes += [
+                "⚠  Spring Boot 3.0/3.1 is reaching end-of-support. Recommend upgrade to 3.5.x.",
+            ]
+
+    if not notes:
+        return ""
+    return "Spring Boot Version Notes:\n" + "\n".join(f"  {n}" for n in notes)
+
+
 def load_context(work_dir: Path) -> ProjectContext:
     """Load context.yaml from work_dir. Returns defaults if file not found."""
     ctx_path = work_dir / CONTEXT_FILENAME
     if not ctx_path.exists():
-        return ProjectContext()
+        # No context.yaml — try to auto-detect the Spring Boot version
+        ctx = ProjectContext()
+        detected_version = detect_spring_boot_version(work_dir)
+        if detected_version:
+            ctx.spring_boot_version = detected_version
+        return ctx
 
     raw = yaml.safe_load(ctx_path.read_text(encoding="utf-8")) or {}
     ctx = ProjectContext(_raw=raw)
@@ -126,6 +243,11 @@ def load_context(work_dir: Path) -> ProjectContext:
     tech = raw.get("tech_stack", {})
     ctx.java_version = tech.get("java_version", ctx.java_version)
     ctx.spring_boot_version = tech.get("spring_boot_version", ctx.spring_boot_version)
+    # If the context.yaml still has the template default, try auto-detect
+    if ctx.spring_boot_version in ("3.2.x", "3.x.x", "", None):
+        detected = detect_spring_boot_version(work_dir)
+        if detected:
+            ctx.spring_boot_version = detected
     ctx.build_tool = tech.get("build_tool", ctx.build_tool)
     ctx.database = tech.get("database", ctx.database)
     ctx.orm = tech.get("orm", ctx.orm)
@@ -179,6 +301,8 @@ def render_context_block(ctx: ProjectContext, project_path: str) -> str:
     else:
         custom_rules_text = "  (none specified)\n"
 
+    version_notes = get_spring_boot_version_notes(ctx.spring_boot_version)
+
     return f"""
 ╔══════════════════════════════════════════════════════════════════╗
 ║                    PROJECT CONTEXT                                ║
@@ -200,7 +324,7 @@ Modules:
 {modules_text}
 Custom Rules (MUST APPLY):
 {custom_rules_text}
-Excluded from analysis:
+{version_notes + chr(10) if version_notes else ""}Excluded from analysis:
   paths : {", ".join(ctx.exclude_paths)}
   packages: {", ".join(ctx.exclude_packages)}
 ╚══════════════════════════════════════════════════════════════════╝

@@ -60,20 +60,30 @@ Custom exception handler must extend BaseException from com.example.common"
       <div>
         <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:6px;">Java Version</label>
         <select x-model="form.java_version" class="si-input">
-          <option value="8">Java 8</option>
-          <option value="11">Java 11</option>
-          <option value="17">Java 17</option>
-          <option value="21">Java 21</option>
+          <option value="8">Java 8 (Legacy)</option>
+          <option value="11">Java 11 (LTS)</option>
+          <option value="17">Java 17 (LTS)</option>
+          <option value="21">Java 21 ★ LTS + Virtual Threads</option>
+          <option value="24">Java 24 (Latest)</option>
         </select>
       </div>
       <div>
         <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:6px;">Spring Boot Version</label>
         <select x-model="form.spring_boot_version" class="si-input">
-          <option value="2.7.x">2.7.x</option>
-          <option value="3.0.x">3.0.x</option>
-          <option value="3.1.x">3.1.x</option>
-          <option value="3.2.x">3.2.x</option>
-          <option value="3.3.x">3.3.x</option>
+          <optgroup label="Spring Boot 2.x (Legacy)">
+            <option value="2.7.x">2.7.x (EOL)</option>
+          </optgroup>
+          <optgroup label="Spring Boot 3.x">
+            <option value="3.0.x">3.0.x (EOL)</option>
+            <option value="3.1.x">3.1.x (EOL)</option>
+            <option value="3.2.x">3.2.x (Maintenance)</option>
+            <option value="3.3.x">3.3.x (Maintenance)</option>
+            <option value="3.4.x">3.4.x (Stable)</option>
+            <option value="3.5.x">3.5.x ★ Latest 3.x</option>
+          </optgroup>
+          <optgroup label="Spring Boot 4.x (Next Major)">
+            <option value="4.0.x">4.0.x (Jakarta EE 11, Java 17+)</option>
+          </optgroup>
         </select>
       </div>
       <div>
@@ -205,7 +215,7 @@ function contextSettings() {
     form: {
       custom_rules_text: (INITIAL.patterns?.custom_rules || []).join('\n'),
       java_version: String(INITIAL.tech_stack?.java_version || 17),
-      spring_boot_version: INITIAL.tech_stack?.spring_boot_version || '3.2.x',
+      spring_boot_version: INITIAL.tech_stack?.spring_boot_version || '3.5.x',
       build_tool: INITIAL.tech_stack?.build_tool || 'maven',
       database: INITIAL.tech_stack?.database || 'mysql',
       auth: INITIAL.tech_stack?.auth || 'jwt',
