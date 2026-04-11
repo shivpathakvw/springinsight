@@ -53,6 +53,7 @@ def _build_agent_prompt(
     run_id: str,
     extra_scope: str = "",
     file_scope_block: str = "",
+    batch_scope_block: str = "",   # injected when running inside a batch scan
 ) -> str:
     """Assemble the full prompt sent to claude for an agent run."""
     skill_path = resolve_skill_path(agent)
@@ -71,6 +72,7 @@ Project Path   : {project_path}
 Output JSON    : {output_json_path}
 Output Report  : {output_md_path}
 {extra_scope}
+{batch_scope_block}
 {file_scope_block}
 === BEGIN ANALYSIS ===
 Execute the full analysis now following ALL instructions in the SKILL.md above.
@@ -101,6 +103,7 @@ async def run_agent_async(
     use_file_scope: bool = True,   # enable agent-specific file filtering
     use_incremental: bool = True,  # skip unchanged files via FileCache
     max_files: int | None = None,  # override per-agent file cap
+    batch_scope_block: str = "",   # non-empty when running inside a batch scan
 ) -> dict:
     """Run a single agent asynchronously. Returns execution metadata."""
     raw_dir = run_dir / "raw"
@@ -167,6 +170,7 @@ async def run_agent_async(
         run_id=run_id,
         extra_scope=extra_scope,
         file_scope_block=file_scope_block,
+        batch_scope_block=batch_scope_block,
     )
 
     try:
@@ -316,6 +320,7 @@ async def run_agents_parallel(
     use_file_scope: bool = True,
     use_incremental: bool = True,
     max_files: int | None = None,
+    batch_scope_block: str = "",   # injected for batch scans
 ) -> list[dict]:
     """Run multiple agents with bounded parallelism.
 
@@ -324,6 +329,7 @@ async def run_agents_parallel(
     use_file_scope: inject agent-specific file lists (reduces tokens).
     use_incremental: skip unchanged files via FileCache.
     max_files: override per-agent file cap (None = use defaults).
+    batch_scope_block: extra prompt constraint limiting analysis to batch paths.
     """
     semaphore = asyncio.Semaphore(parallelism)
 
@@ -337,6 +343,7 @@ async def run_agents_parallel(
                 use_file_scope=use_file_scope,
                 use_incremental=use_incremental,
                 max_files=max_files,
+                batch_scope_block=batch_scope_block,
             )
             if progress_callback:
                 progress_callback(agent.id, result["status"])

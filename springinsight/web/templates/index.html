@@ -43,7 +43,8 @@
             placeholder="https://github.com/owner/my-spring-app  or  /Users/me/projects/api-service"
             class="si-input"
             @keydown.enter="startScan()"
-            @blur="repoUrl.trim() && estimateCost()"
+            @input="!repoUrl.trim() && (largeProjectInfo = null, estimate = null)"
+            @blur="repoUrl.trim() && onUrlBlur()"
             :disabled="scanning"
           >
         </div>
@@ -81,6 +82,47 @@
           <input x-model.number="budget" type="number" min="0.01" step="0.10" placeholder="no limit"
                  style="width:90px; padding:4px 8px; background:var(--surface); border:1px solid var(--border); border-radius:5px; color:var(--text); font-size:12px;"
                  :disabled="scanning">
+        </div>
+      </div>
+
+      <!-- Large project detection banner -->
+      <div x-show="largeProjectInfo && largeProjectInfo.is_large && !scanning" x-cloak
+           style="margin-top:14px; padding:14px 16px; background:rgba(234,179,8,.07); border:1px solid rgba(234,179,8,.25); border-radius:8px;">
+        <div style="display:flex; align-items:flex-start; gap:10px; margin-bottom:10px;">
+          <svg style="flex-shrink:0; margin-top:1px;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#eab308" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <div style="flex:1;">
+            <div style="font-size:13px; font-weight:600; color:#facc15; margin-bottom:3px;">Large project detected</div>
+            <div style="font-size:12px; color:var(--muted);">
+              <strong x-text="largeProjectInfo.java_files" style="color:var(--text);"></strong> Java files found.
+              Scanning in one go may hang or time out. We recommend splitting into
+              <strong x-text="largeProjectInfo.batch_plan && largeProjectInfo.batch_plan.batch_count" style="color:var(--text);"></strong> batches
+              using <strong x-text="largeProjectInfo.batch_plan && largeProjectInfo.batch_plan.strategy" style="color:#facc15;"></strong> split strategy.
+            </div>
+          </div>
+        </div>
+
+        <!-- Batch plan preview -->
+        <div x-show="largeProjectInfo.batch_plan && largeProjectInfo.batch_plan.batches.length > 0"
+             style="display:flex; flex-wrap:wrap; gap:5px; margin-bottom:12px;">
+          <template x-for="batch in (largeProjectInfo.batch_plan ? largeProjectInfo.batch_plan.batches : [])" :key="batch.id">
+            <div style="padding:3px 10px; background:rgba(234,179,8,.1); border:1px solid rgba(234,179,8,.2); border-radius:4px; font-size:11px; color:#fbbf24; display:flex; align-items:center; gap:5px;">
+              <span x-text="batch.name"></span>
+              <span style="color:var(--muted);" x-text="'(' + batch.java_file_count + ' files)'"></span>
+            </div>
+          </template>
+        </div>
+
+        <!-- Action buttons -->
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn-primary" @click="startBatchScan()" :disabled="scanning"
+                  style="background:#eab308; font-size:13px; padding:8px 18px; display:flex; align-items:center; gap:6px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            Start Batch Scan (Recommended)
+          </button>
+          <button @click="startScan()" :disabled="scanning"
+                  style="background:transparent; border:1px solid var(--border); border-radius:7px; padding:8px 18px; font-size:13px; font-weight:500; cursor:pointer; color:var(--muted);">
+            Scan Anyway (May Be Slow)
+          </button>
         </div>
       </div>
 
@@ -355,6 +397,8 @@ function dashboard() {
     prPreview: null,
     // github token presence (checked on load)
     hasGithubToken: true,
+    // large project detection
+    largeProjectInfo: null,
 
     async init() {
       // Check if GitHub token is configured
@@ -369,6 +413,11 @@ function dashboard() {
 
     isGithubUrl(url) {
       return /^https?:\/\/(github|gitlab|bitbucket)\./i.test(url.trim());
+    },
+
+    async onUrlBlur() {
+      // Fire both cost estimate and large-project analysis in parallel
+      await Promise.all([this.estimateCost(), this.analyzeProject()]);
     },
 
     async estimateCost() {
@@ -388,6 +437,25 @@ function dashboard() {
         // silently ignore
       } finally {
         this.estimating = false;
+      }
+    },
+
+    async analyzeProject() {
+      const url = this.repoUrl.trim();
+      if (!url) { this.largeProjectInfo = null; return; }
+      // Only run analysis for local paths (GitHub repos need clone first)
+      // but we still call the endpoint — the server handles missing paths gracefully
+      try {
+        const res = await fetch('/api/scan/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ repo_url: url }),
+        });
+        if (res.ok) {
+          this.largeProjectInfo = await res.json();
+        }
+      } catch (e) {
+        this.largeProjectInfo = null;
       }
     },
 
@@ -413,6 +481,36 @@ function dashboard() {
         const data = await res.json();
         if (!res.ok || data.error) {
           this.error = data.error || 'Failed to start scan.';
+          this.scanning = false;
+          return;
+        }
+        window.location.href = data.redirect;
+      } catch (e) {
+        this.error = 'Network error: ' + e.message;
+        this.scanning = false;
+      }
+    },
+
+    async startBatchScan() {
+      const url = this.repoUrl.trim();
+      if (!url) { this.error = 'Please enter a repository URL or local path.'; return; }
+      this.error = '';
+      this.scanning = true;
+      try {
+        const payload = {
+          repo_url: url,
+          use_scope: this.useScope,
+          use_incremental: this.useIncremental,
+        };
+        if (this.branch.trim()) payload.branch = this.branch.trim();
+        const res = await fetch('/api/scan/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          this.error = data.error || 'Failed to start batch scan.';
           this.scanning = false;
           return;
         }

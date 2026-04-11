@@ -1,0 +1,492 @@
+{% extends "base.html" %}
+{% block title %}Batch Scan — {{ initial_state.project_name }} — SpringInsight{% endblock %}
+
+{% block head %}
+<style>
+  [x-cloak] { display: none !important; }
+
+  .batch-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 18px;
+    transition: border-color .2s;
+  }
+  .batch-card.is-running  { border-color: var(--blue); }
+  .batch-card.is-complete { border-color: var(--green); }
+  .batch-card.is-failed   { border-color: var(--red); }
+
+  .score-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 9px; border-radius: 20px;
+    font-size: 11px; font-weight: 700;
+    background: rgba(255,255,255,.05);
+    color: var(--text);
+  }
+  .score-pill.good   { background: rgba(34,197,94,.15);  color: #4ade80; }
+  .score-pill.medium { background: rgba(234,179,8,.15);  color: #facc15; }
+  .score-pill.poor   { background: rgba(239,68,68,.15);  color: #f87171; }
+
+  .agent-mini-row {
+    display: flex; align-items: center; gap: 7px;
+    padding: 4px 0;
+    font-size: 12px; color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+  .agent-mini-row:last-child { border-bottom: none; }
+  .agent-mini-row .dot { width: 6px; height: 6px; flex-shrink: 0; }
+
+  .strategy-badge {
+    display: inline-block;
+    padding: 2px 8px; border-radius: 4px;
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .06em;
+    background: rgba(168,85,247,.15); color: #c084fc;
+  }
+</style>
+{% endblock %}
+
+{% block nav_extra %}
+<a href="/scans/batch/{{ batch_scan_id }}" class="nav-item active">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+  Batch Scan
+</a>
+{% endblock %}
+
+{% block content %}
+<div style="padding:28px 36px; max-width:1100px;" x-data="batchScan()" x-init="init()">
+
+  <!-- ── Header ── -->
+  <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+    <div>
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:5px;">
+        <a href="/" style="color:var(--muted); font-size:12px;">Dashboard</a>
+        <span style="color:var(--muted);">›</span>
+        <span style="font-size:12px; color:var(--muted);" x-text="state.project_name"></span>
+      </div>
+      <h1 style="font-size:20px; font-weight:700; margin:0 0 6px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <span x-text="state.project_name"></span>
+        <span x-bind:class="statusBadgeClass()" class="badge" x-text="statusLabel()"></span>
+        <span class="strategy-badge" x-text="state.strategy + ' split'" x-show="state.strategy"></span>
+      </h1>
+      <div style="color:var(--muted); font-size:12px; font-family:monospace; word-break:break-all;" x-text="state.repo_url"></div>
+    </div>
+
+    <!-- Stat Cards -->
+    <div style="display:flex; gap:10px; flex-shrink:0; flex-wrap:wrap;">
+      <div class="card" style="padding:10px 16px; text-align:center; min-width:80px;">
+        <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px;">Batches</div>
+        <div style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--text);">
+          <span x-text="completedBatches()"></span><span style="color:var(--muted); font-size:14px;">/</span><span x-text="state.batches.length"></span>
+        </div>
+      </div>
+      <div class="card" style="padding:10px 16px; text-align:center; min-width:80px;">
+        <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px;">Findings</div>
+        <div style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--orange);" x-text="state.total_findings || 0"></div>
+      </div>
+      <div class="card" style="padding:10px 16px; text-align:center; min-width:80px;">
+        <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px;">Java Files</div>
+        <div style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--blue);" x-text="state.total_java_files || '—'"></div>
+      </div>
+      <div class="card" style="padding:10px 16px; text-align:center; min-width:80px;">
+        <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px;">Elapsed</div>
+        <div style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--text);" x-text="elapsedTime()"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Overall Progress Bar ── -->
+  <div style="margin-bottom:24px;">
+    <div class="score-bar" style="height:8px;">
+      <div class="score-fill"
+           :class="state.status === 'complete' ? 'score-fill-green' : 'score-fill-yellow'"
+           :style="'width:' + overallProgress() + '%'"></div>
+    </div>
+    <div style="display:flex; justify-content:space-between; margin-top:6px; font-size:11px; color:var(--muted);">
+      <span x-text="progressLabel()"></span>
+      <span x-text="overallProgress() + '%'"></span>
+    </div>
+  </div>
+
+  <!-- ── Batch Cards ── -->
+  <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:28px;">
+    <template x-for="(batch, idx) in state.batches" :key="batch.id">
+      <div class="batch-card"
+           :class="batchCardClass(idx)">
+
+        <!-- Batch header row -->
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <!-- Status indicator -->
+            <div style="width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0;"
+                 :style="batchIconStyle(idx)">
+              <!-- Pending: number -->
+              <span x-show="batchStatus(idx) === 'pending'" style="font-size:13px; font-weight:700;" x-text="idx + 1"></span>
+              <!-- Running: spinner -->
+              <svg x-show="batchStatus(idx) === 'running'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                   style="animation:spin 1s linear infinite;">
+                <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+              </svg>
+              <!-- Complete: check -->
+              <svg x-show="batchStatus(idx) === 'complete'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              <!-- Failed: × -->
+              <svg x-show="batchStatus(idx) === 'failed'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </div>
+
+            <div>
+              <div style="font-size:14px; font-weight:600; color:var(--text);" x-text="batch.name"></div>
+              <div style="font-size:11px; color:var(--muted); margin-top:2px;" x-text="batch.description"></div>
+            </div>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:10px; flex-shrink:0;">
+            <!-- File count chip -->
+            <span style="font-size:11px; color:var(--muted);" x-text="batch.java_file_count + ' files'"></span>
+
+            <!-- Findings count (once complete) -->
+            <span x-show="batchFindings(idx) !== null" x-cloak
+                  style="font-size:12px; font-weight:600; color:var(--orange);"
+                  x-text="batchFindings(idx) + ' findings'"></span>
+
+            <!-- Link to sub-scan report -->
+            <a x-show="batchRunId(idx)" x-cloak
+               :href="'/scans/' + batchRunId(idx)"
+               style="font-size:11px; color:var(--blue); display:flex; align-items:center; gap:3px;"
+               target="_blank">
+              View Report
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            </a>
+          </div>
+        </div>
+
+        <!-- Agent sub-progress grid (only when this batch is running) -->
+        <div x-show="batchStatus(idx) === 'running' && agentGridForBatch(idx).length > 0" x-cloak
+             style="border-top: 1px solid var(--border); margin-top:8px; padding-top:10px;">
+          <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px;">Agent Progress</div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:5px;">
+            <template x-for="agent in agentGridForBatch(idx)" :key="agent.id">
+              <div class="agent-mini-row">
+                <div class="dot" :class="'dot-' + agent.status"></div>
+                <span x-text="agent.name" style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
+                <span x-show="agent.status === 'complete'" style="font-size:10px; color:var(--green);">✓</span>
+              </div>
+            </template>
+          </div>
+
+          <!-- Latest log line from running batch -->
+          <div x-show="latestLog(idx)" x-cloak
+               style="margin-top:8px; padding:6px 10px; background:var(--surface); border-radius:5px; font-size:11px; font-family:monospace; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+               x-text="latestLog(idx)"></div>
+        </div>
+
+        <!-- Include paths (collapsed, shown for pending batches) -->
+        <div x-show="batchStatus(idx) === 'pending' && batch.include_paths && batch.include_paths.length > 0" x-cloak
+             style="border-top:1px solid var(--border); margin-top:8px; padding-top:8px;">
+          <div style="font-size:10px; color:var(--muted); margin-bottom:4px;">Paths in scope</div>
+          <div style="display:flex; flex-wrap:wrap; gap:4px;">
+            <template x-for="p in batch.include_paths.slice(0,6)" :key="p">
+              <code style="font-size:10px; padding:2px 6px; background:var(--surface); border-radius:3px; color:var(--muted);" x-text="p"></code>
+            </template>
+            <span x-show="batch.include_paths.length > 6" style="font-size:10px; color:var(--muted);"
+                  x-text="'+ ' + (batch.include_paths.length - 6) + ' more'"></span>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <!-- ── Aggregate Scores (shown when complete) ── -->
+  <div x-show="state.status === 'complete' && state.aggregate_scores && Object.keys(state.aggregate_scores).length > 0" x-cloak
+       class="card" style="padding:20px 24px; margin-bottom:20px;">
+    <h2 style="font-size:14px; font-weight:700; margin:0 0 16px; color:var(--text);">Aggregate Scores (Averaged Across All Batches)</h2>
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:14px; margin-bottom:20px;">
+      <template x-for="(score, key) in state.aggregate_scores" :key="key">
+        <div style="text-align:center;">
+          <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px;" x-text="scoreLabel(key)"></div>
+          <div style="font-size:28px; font-weight:800; margin-bottom:6px;" :style="'color:' + scoreColor(score)" x-text="score"></div>
+          <div class="score-bar">
+            <div class="score-fill" :class="scoreFillClass(score)" :style="'width:' + score + '%'"></div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- All batch reports -->
+    <div style="border-top:1px solid var(--border); padding-top:14px;">
+      <div style="font-size:11px; color:var(--muted); margin-bottom:10px; text-transform:uppercase; letter-spacing:.06em;">Individual Batch Reports</div>
+      <div style="display:flex; flex-wrap:wrap; gap:8px;">
+        <template x-for="(runId, idx) in state.completed_run_ids" :key="runId">
+          <a :href="'/scans/' + runId"
+             style="display:inline-flex; align-items:center; gap:5px; padding:6px 12px; background:rgba(59,130,246,.1); border:1px solid rgba(59,130,246,.25); border-radius:6px; font-size:12px; color:var(--blue);"
+             target="_blank">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span x-text="'Batch ' + (idx + 1) + ': ' + (batchNameByIndex(idx))"></span>
+          </a>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Error banner ── -->
+  <div x-show="state.error" x-cloak
+       style="padding:12px 16px; background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.3); border-radius:8px; color:#f87171; font-size:13px; margin-bottom:20px;">
+    <strong>Batch scan error:</strong> <span x-text="state.error"></span>
+  </div>
+
+</div>
+
+<script>
+function batchScan() {
+  const batchScanId = '{{ batch_scan_id }}';
+  const initialState = {{ initial_state | tojson }};
+
+  return {
+    state: { ...initialState },
+    _es: null,
+    _startTs: Date.now(),
+    _elapsed: 0,
+    _timerHandle: null,
+
+    // Per-batch runtime data keyed by batch_index
+    _batchRunIds:    {},  // idx -> run_id
+    _batchFindings:  {},  // idx -> count
+    _batchAgents:    {},  // run_id -> {id -> {id, name, status}}
+    _batchLogs:      {},  // idx -> last log message
+
+    init() {
+      // Pre-populate from initial state
+      if (this.state.current_run_id) {
+        this._batchRunIds[this.state.current_batch_index] = this.state.current_run_id;
+      }
+      this.state.completed_run_ids.forEach((rid, i) => {
+        this._batchRunIds[i] = rid;
+      });
+
+      this._startTimer();
+      this._connectSSE();
+    },
+
+    _startTimer() {
+      this._timerHandle = setInterval(() => { this._elapsed++; }, 1000);
+    },
+
+    _connectSSE() {
+      const url = `/api/batch-scans/${batchScanId}/stream`;
+      this._es = new EventSource(url);
+
+      this._es.onmessage = (ev) => {
+        try {
+          const evt = JSON.parse(ev.data);
+          this._handleEvent(evt);
+        } catch (e) { /* ignore malformed */ }
+      };
+
+      this._es.onerror = () => {
+        if (this.state.status === 'complete' || this.state.status === 'failed') {
+          this._es.close();
+          clearInterval(this._timerHandle);
+        }
+      };
+    },
+
+    _handleEvent(evt) {
+      const t = evt.type;
+
+      if (t === 'batch_started') {
+        this.state.strategy = evt.strategy;
+        this.state.total_java_files = evt.total_java_files;
+      }
+      else if (t === 'batch_item_started') {
+        this.state.current_batch_index = evt.batch_index;
+        this.state.current_run_id = evt.run_id;
+        this._batchRunIds[evt.batch_index] = evt.run_id;
+        this._batchAgents[evt.run_id] = {};
+      }
+      else if (t === 'batch_item_complete') {
+        this._batchFindings[evt.batch_index] = evt.findings;
+        this.state.total_findings = evt.total_findings_so_far;
+      }
+      else if (t === 'batch_item_failed') {
+        // Mark run_id as known but failed
+        this._batchRunIds[evt.batch_index] = evt.run_id;
+      }
+      else if (t === 'batch_complete') {
+        this.state.status = 'complete';
+        this.state.aggregate_scores = evt.aggregate_scores;
+        this.state.total_findings = evt.total_findings;
+        this.state.completed_run_ids = evt.completed_run_ids;
+        this.state.completed_at = evt.completed_at;
+        this.state.current_run_id = null;
+        clearInterval(this._timerHandle);
+        this._es.close();
+      }
+      else if (t === 'scan_failed' && evt.batch_index !== undefined) {
+        this.state.error = evt.error;
+      }
+      // Bridged sub-scan events
+      else if (t === 'scan_started' && evt.run_id) {
+        const agents = {};
+        (evt.agents || []).forEach(a => {
+          agents[a.id] = { id: a.id, name: a.name, status: 'pending' };
+        });
+        this._batchAgents[evt.run_id] = agents;
+      }
+      else if (t === 'agent_update' && evt.run_id) {
+        if (!this._batchAgents[evt.run_id]) this._batchAgents[evt.run_id] = {};
+        const ag = this._batchAgents[evt.run_id];
+        if (!ag[evt.agent_id]) ag[evt.agent_id] = { id: evt.agent_id, name: evt.agent_name, status: 'pending' };
+        ag[evt.agent_id].status = evt.status;
+        ag[evt.agent_id].name = evt.agent_name || ag[evt.agent_id].name;
+      }
+      else if (t === 'agent_log' && evt.batch_index !== undefined) {
+        this._batchLogs[evt.batch_index] = evt.message;
+      }
+      else if (t === 'heartbeat') {
+        // keep-alive, no action
+      }
+    },
+
+    // ── Computed helpers ─────────────────────────────────────────────────────
+
+    completedBatches() {
+      return this.state.completed_run_ids.length;
+    },
+
+    overallProgress() {
+      const total = this.state.batches.length;
+      if (!total) return 0;
+      if (this.state.status === 'complete') return 100;
+      const done = this.completedBatches();
+      // Add partial credit for the currently running batch based on agent completion
+      let running_pct = 0;
+      const cur_idx = this.state.current_batch_index;
+      const cur_run = this.state.current_run_id;
+      if (cur_run && this._batchAgents[cur_run]) {
+        const agents = Object.values(this._batchAgents[cur_run]);
+        const completed = agents.filter(a => a.status === 'complete' || a.status === 'failed').length;
+        running_pct = agents.length > 0 ? completed / agents.length : 0;
+      }
+      return Math.round(((done + running_pct) / total) * 100);
+    },
+
+    progressLabel() {
+      const done = this.completedBatches();
+      const total = this.state.batches.length;
+      if (this.state.status === 'complete') return `All ${total} batches completed`;
+      if (this.state.status === 'running') return `Running batch ${(this.state.current_batch_index || 0) + 1} of ${total}`;
+      return `Preparing ${total} batches…`;
+    },
+
+    batchStatus(idx) {
+      const runId = this._batchRunIds[idx];
+      if (this.state.completed_run_ids.includes(runId)) return 'complete';
+      if (this.state.current_batch_index === idx && this.state.status === 'running') return 'running';
+      // Check if it's a failed batch (no run_id but idx was attempted)
+      return 'pending';
+    },
+
+    batchCardClass(idx) {
+      const s = this.batchStatus(idx);
+      if (s === 'running')  return 'is-running';
+      if (s === 'complete') return 'is-complete';
+      if (s === 'failed')   return 'is-failed';
+      return '';
+    },
+
+    batchIconStyle(idx) {
+      const s = this.batchStatus(idx);
+      const styles = {
+        pending:  'background:rgba(107,114,128,.15); color:var(--muted);',
+        running:  'background:rgba(59,130,246,.15); color:var(--blue);',
+        complete: 'background:rgba(34,197,94,.15); color:var(--green);',
+        failed:   'background:rgba(239,68,68,.15); color:var(--red);',
+      };
+      return styles[s] || styles.pending;
+    },
+
+    batchRunId(idx) {
+      return this._batchRunIds[idx] || null;
+    },
+
+    batchFindings(idx) {
+      if (this._batchFindings[idx] !== undefined) return this._batchFindings[idx];
+      return null;
+    },
+
+    agentGridForBatch(idx) {
+      const runId = this._batchRunIds[idx];
+      if (!runId || !this._batchAgents[runId]) return [];
+      return Object.values(this._batchAgents[runId]);
+    },
+
+    latestLog(idx) {
+      return this._batchLogs[idx] || '';
+    },
+
+    batchNameByIndex(idx) {
+      const b = this.state.batches[idx];
+      return b ? b.name : `Batch ${idx + 1}`;
+    },
+
+    // ── Status / UI helpers ───────────────────────────────────────────────────
+
+    statusLabel() {
+      const s = this.state.status;
+      if (s === 'complete') return 'Complete';
+      if (s === 'running')  return 'Scanning…';
+      if (s === 'failed')   return 'Failed';
+      return 'Queued';
+    },
+
+    statusBadgeClass() {
+      const s = this.state.status;
+      if (s === 'complete') return 'badge badge-green';
+      if (s === 'running')  return 'badge badge-blue';
+      if (s === 'failed')   return 'badge badge-red';
+      return 'badge badge-gray';
+    },
+
+    elapsedTime() {
+      const secs = this._elapsed;
+      const m = Math.floor(secs / 60);
+      const s = secs % 60;
+      return m > 0 ? `${m}m ${String(s).padStart(2,'0')}s` : `${s}s`;
+    },
+
+    scoreLabel(key) {
+      const labels = {
+        overall: 'Overall',
+        security: 'Security',
+        code_quality: 'Code Quality',
+        architecture: 'Architecture',
+        api_design: 'API Design',
+        test_coverage: 'Test Coverage',
+        production_readiness: 'Prod. Readiness',
+      };
+      return labels[key] || key.replace(/_/g,' ');
+    },
+
+    scoreColor(score) {
+      if (score >= 75) return 'var(--green)';
+      if (score >= 50) return 'var(--yellow)';
+      return 'var(--red)';
+    },
+
+    scoreFillClass(score) {
+      if (score >= 75) return 'score-fill-green';
+      if (score >= 50) return 'score-fill-yellow';
+      return 'score-fill-red';
+    },
+  };
+}
+</script>
+
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+{% endblock %}

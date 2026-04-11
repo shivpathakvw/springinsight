@@ -30,6 +30,10 @@ logger = logging.getLogger(__name__)
 # Keyed by run_id (8-char hex string).
 _active_scans: dict[str, "ScanState"] = {}
 
+# Global registry of active batch scans.
+# Keyed by batch_scan_id (8-char hex string).
+_active_batch_scans: dict[str, "BatchScanState"] = {}
+
 # Max log lines kept per agent in memory
 MAX_AGENT_LOGS = 200
 
@@ -135,6 +139,7 @@ async def run_scan_background(
     use_file_scope: bool = True,
     use_incremental: bool = True,
     max_files: int | None = None,
+    batch_scope_block: str = "",   # non-empty when called from a batch scan
 ) -> None:
     """Coroutine launched as a background asyncio task."""
     state.status = "running"
@@ -207,6 +212,7 @@ async def run_scan_background(
             use_file_scope=use_file_scope,
             use_incremental=use_incremental,
             max_files=max_files,
+            batch_scope_block=batch_scope_block,
         )
     except Exception as exc:
         logger.exception("Scan %s crashed: %s", state.run_id, exc)
@@ -350,3 +356,249 @@ def _persist_to_db(
 
     except Exception as exc:
         logger.error("Failed to persist scan %s to DB: %s", state.run_id, exc)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Batch scan orchestrator
+# ══════════════════════════════════════════════════════════════════════════════
+
+@dataclass
+class BatchScanState:
+    """Tracks the overall state of a multi-batch scan of a large project."""
+
+    batch_scan_id: str
+    project_name: str
+    repo_url: str
+    total_java_files: int
+    batches: list[dict]                    # [{id, name, description, include_paths, java_file_count}]
+    strategy: str                          # maven | gradle | dir | package | slice
+    status: str = "pending"               # pending | running | complete | failed
+    current_batch_index: int = 0
+    current_run_id: Optional[str] = None  # run_id of the batch currently scanning
+    completed_run_ids: list[str] = field(default_factory=list)
+    total_findings: int = 0
+    aggregate_scores: dict = field(default_factory=dict)
+    started_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    completed_at: Optional[str] = None
+    error: Optional[str] = None
+
+    # Internal pub/sub
+    _event_log: list = field(default_factory=list, repr=False)
+    _subscribers: list = field(default_factory=list, repr=False)
+
+    def push_event(self, event: dict) -> None:
+        event.setdefault("timestamp", datetime.utcnow().isoformat())
+        self._event_log.append(event)
+        for q in list(self._subscribers):
+            try:
+                q.put_nowait(event)
+            except asyncio.QueueFull:
+                pass
+
+    def subscribe(self) -> asyncio.Queue:
+        q: asyncio.Queue = asyncio.Queue(maxsize=4000)
+        for evt in self._event_log:
+            try:
+                q.put_nowait(evt)
+            except asyncio.QueueFull:
+                break
+        self._subscribers.append(q)
+        return q
+
+    def unsubscribe(self, q: asyncio.Queue) -> None:
+        try:
+            self._subscribers.remove(q)
+        except ValueError:
+            pass
+
+    def to_dict(self) -> dict:
+        return {
+            "batch_scan_id": self.batch_scan_id,
+            "project_name": self.project_name,
+            "repo_url": self.repo_url,
+            "total_java_files": self.total_java_files,
+            "batches": self.batches,
+            "strategy": self.strategy,
+            "status": self.status,
+            "current_batch_index": self.current_batch_index,
+            "current_run_id": self.current_run_id,
+            "completed_run_ids": self.completed_run_ids,
+            "total_findings": self.total_findings,
+            "aggregate_scores": self.aggregate_scores,
+            "started_at": self.started_at,
+            "completed_at": self.completed_at,
+            "error": self.error,
+        }
+
+
+async def run_batch_scan_background(
+    batch_state: BatchScanState,
+    ctx: ProjectContext,
+    project_path: Path,
+    work_dir: Path,
+    agents: list[AgentMeta],
+    use_file_scope: bool = True,
+    use_incremental: bool = True,
+) -> None:
+    """
+    Orchestrate a multi-batch scan:
+    • Runs each batch sequentially (one at a time) to avoid memory overload.
+    • Each batch creates its own ScanState and run_id so the existing live-scan
+      SSE and report infrastructure works without changes.
+    • Aggregates findings/scores across all batches into the BatchScanState.
+    • Forwards batch-level SSE events to the parent BatchScanState subscribers.
+    """
+    import uuid as _uuid
+    from ..utils.batch_scanner import ScanBatch
+
+    batch_state.status = "running"
+    batches = batch_state.batches
+    total_batches = len(batches)
+
+    batch_state.push_event({
+        "type": "batch_started",
+        "total_batches": total_batches,
+        "strategy": batch_state.strategy,
+        "total_java_files": batch_state.total_java_files,
+    })
+
+    all_scores_list: list[dict] = []
+
+    for batch_index, batch_dict in enumerate(batches):
+        batch_id_label = batch_dict["id"]
+        batch_name = batch_dict["name"]
+        include_paths = batch_dict.get("include_paths", [])
+
+        run_id = _uuid.uuid4().hex[:8]
+        batch_state.current_batch_index = batch_index
+        batch_state.current_run_id = run_id
+
+        batch_state.push_event({
+            "type": "batch_item_started",
+            "batch_index": batch_index,
+            "total_batches": total_batches,
+            "batch_id": batch_id_label,
+            "batch_name": batch_name,
+            "run_id": run_id,
+            "include_paths": include_paths,
+        })
+
+        # Build the batch scope prompt block
+        batch_scope = ScanBatch(
+            id=batch_id_label,
+            name=batch_name,
+            description=batch_dict.get("description", ""),
+            include_paths=include_paths,
+        )
+        batch_scope_block = batch_scope.to_batch_scope_block(
+            str(project_path), batch_index + 1, total_batches
+        )
+
+        # Persist a Run record for this batch sub-scan
+        try:
+            from ..db.database import get_db
+            from ..db.models import Run
+            with get_db() as db:
+                run = Run(
+                    id=run_id,
+                    project_name=f"{batch_state.project_name} [{batch_id_label}]",
+                    project_path=str(project_path),
+                    source_type="batch",
+                    source_url=batch_state.repo_url,
+                    status="running",
+                    agents_requested=[a.id for a in agents],
+                    agents_completed=[],
+                    git_branch=f"batch-scan/{batch_state.batch_scan_id}",
+                )
+                db.add(run)
+        except Exception as exc:
+            logger.warning("Batch DB insert failed for %s: %s", run_id, exc)
+
+        # Build a sub-ScanState and register it
+        sub_state = ScanState(
+            run_id=run_id,
+            repo_url=batch_state.repo_url,
+            project_name=f"{batch_state.project_name} [{batch_name}]",
+            agents={a.id: "pending" for a in agents},
+            agent_names={a.id: a.name for a in agents},
+            agent_models={a.id: a.model for a in agents},
+        )
+        _active_scans[run_id] = sub_state
+
+        # Bridge sub-scan events to the parent batch stream
+        def _bridge_event(evt: dict, _run_id: str = run_id, _batch_idx: int = batch_index):
+            bridged = {**evt, "run_id": _run_id, "batch_index": _batch_idx, "batch_name": batch_name}
+            batch_state.push_event(bridged)
+
+        # Monkey-patch push_event to also forward to parent
+        original_push = sub_state.push_event.__func__  # noqa
+        def _patched_push(self, event, _bridge=_bridge_event):
+            original_push(self, event)
+            _bridge(event)
+        import types
+        sub_state.push_event = types.MethodType(_patched_push, sub_state)
+
+        try:
+            await run_scan_background(
+                sub_state,
+                ctx,
+                project_path,
+                work_dir,
+                agents,
+                use_file_scope=use_file_scope,
+                use_incremental=use_incremental,
+                batch_scope_block=batch_scope_block,
+            )
+        except Exception as exc:
+            logger.error("Batch %s scan failed: %s", batch_id_label, exc)
+            batch_state.push_event({
+                "type": "batch_item_failed",
+                "batch_index": batch_index,
+                "batch_id": batch_id_label,
+                "run_id": run_id,
+                "error": str(exc),
+            })
+            # Continue with remaining batches
+
+        batch_state.completed_run_ids.append(run_id)
+        batch_state.total_findings += sub_state.findings_count
+        if sub_state.scores:
+            all_scores_list.append(sub_state.scores)
+
+        batch_state.push_event({
+            "type": "batch_item_complete",
+            "batch_index": batch_index,
+            "total_batches": total_batches,
+            "batch_id": batch_id_label,
+            "batch_name": batch_name,
+            "run_id": run_id,
+            "findings": sub_state.findings_count,
+            "total_findings_so_far": batch_state.total_findings,
+        })
+
+    # Aggregate scores (average across batches)
+    if all_scores_list:
+        keys = set().union(*all_scores_list)
+        batch_state.aggregate_scores = {
+            k: round(sum(s.get(k, 0) for s in all_scores_list) / len(all_scores_list), 1)
+            for k in keys
+        }
+
+    batch_state.status = "complete"
+    batch_state.completed_at = datetime.utcnow().isoformat()
+    batch_state.current_run_id = None
+
+    batch_state.push_event({
+        "type": "batch_complete",
+        "total_findings": batch_state.total_findings,
+        "aggregate_scores": batch_state.aggregate_scores,
+        "completed_run_ids": batch_state.completed_run_ids,
+        "completed_at": batch_state.completed_at,
+    })
+
+    logger.info(
+        "Batch scan %s complete — %d batches, %d total findings",
+        batch_state.batch_scan_id,
+        total_batches,
+        batch_state.total_findings,
+    )

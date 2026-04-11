@@ -42,8 +42,14 @@ from ..github.config import (
     get_github_token,
 )
 from ..github.pr_scanner import verify_token, parse_pr_url, scan_pr as github_scan_pr, start_poller
-from .scanner import ScanState, _active_scans, run_scan_background
+from .scanner import (
+    ScanState, _active_scans, run_scan_background,
+    BatchScanState, _active_batch_scans, run_batch_scan_background,
+)
 from ..utils.cost_estimator import count_project_files, estimate_scan_cost, select_agents_within_budget
+from ..utils.batch_scanner import (
+    detect_large_project, create_batch_plan, LARGE_PROJECT_THRESHOLD,
+)
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
@@ -365,6 +371,182 @@ async def api_start_scan(request: Request):
         response_body["estimate"] = estimate_info
 
     return JSONResponse(response_body)
+
+
+@app.post("/api/scan/analyze")
+async def api_scan_analyze(request: Request):
+    """Analyze a project and return large-project / batch info before starting a scan.
+
+    Accepts JSON: {repo_url: str}
+    Returns: {is_large, java_files, threshold, batch_plan?}
+    """
+    body = await request.json()
+    repo_url: str = body.get("repo_url", "").strip()
+    if not repo_url:
+        return JSONResponse({"error": "repo_url is required"}, status_code=400)
+
+    data_dir = request.app.state.data_dir
+    try:
+        project_path, _, _ = resolve_project_path(repo_url, data_dir)
+    except Exception:
+        # If we can't resolve the path (e.g. GitHub URL not yet cloned),
+        # return a benign "not large" response so the UI stays clean.
+        return JSONResponse({
+            "is_large": False,
+            "java_files": 0,
+            "threshold": LARGE_PROJECT_THRESHOLD,
+            "note": "project not yet available locally",
+        })
+
+    if not project_path.exists():
+        return JSONResponse({
+            "is_large": False,
+            "java_files": 0,
+            "threshold": LARGE_PROJECT_THRESHOLD,
+        })
+
+    is_large, java_count = detect_large_project(project_path)
+    result: dict = {
+        "is_large": is_large,
+        "java_files": java_count,
+        "threshold": LARGE_PROJECT_THRESHOLD,
+    }
+    if is_large:
+        try:
+            plan = create_batch_plan(project_path)
+            result["batch_plan"] = plan.to_dict()
+        except Exception as exc:
+            logger.warning("Batch plan failed: %s", exc)
+
+    return JSONResponse(result)
+
+
+@app.post("/api/scan/batch")
+async def api_start_batch_scan(request: Request):
+    """Start a batched scan of a large project.
+
+    Accepts JSON: {repo_url, batch_size?, use_scope?, use_incremental?}
+    Returns: {batch_scan_id, batch_count, redirect}
+    """
+    body = await request.json()
+    repo_url: str = body.get("repo_url", "").strip()
+    if not repo_url:
+        return JSONResponse({"error": "repo_url is required"}, status_code=400)
+
+    use_scope: bool = body.get("use_scope", True)
+    use_incremental: bool = body.get("use_incremental", True)
+    batch_size: int = int(body.get("batch_size", 150))
+    branch: str | None = body.get("branch") or None
+
+    data_dir = request.app.state.data_dir
+    try:
+        project_path, source_type, source_url = resolve_project_path(repo_url, data_dir, branch=branch)
+    except Exception as exc:
+        return JSONResponse({"error": f"Cannot resolve project: {exc}"}, status_code=400)
+
+    try:
+        ctx = load_context(project_path)
+    except Exception:
+        ctx = ProjectContext()
+        ctx.name = project_path.name
+        ctx.base_path = str(project_path)
+
+    agents = get_enabled_agents("all")
+    agent_config = load_agent_config()
+    if agent_config:
+        agents = [a for a in agents if agent_config.get(a.id, True)]
+    if not agents:
+        return JSONResponse({"error": "No enabled agents."}, status_code=400)
+
+    # Create batch plan
+    try:
+        plan = create_batch_plan(project_path, batch_size=batch_size)
+    except Exception as exc:
+        return JSONResponse({"error": f"Batch planning failed: {exc}"}, status_code=500)
+
+    batch_scan_id = uuid.uuid4().hex[:8]
+
+    batch_state = BatchScanState(
+        batch_scan_id=batch_scan_id,
+        project_name=ctx.name,
+        repo_url=repo_url,
+        total_java_files=plan.total_java_files,
+        batches=plan.to_dict()["batches"],
+        strategy=plan.strategy,
+    )
+    _active_batch_scans[batch_scan_id] = batch_state
+
+    asyncio.create_task(
+        run_batch_scan_background(
+            batch_state, ctx, project_path, data_dir, agents,
+            use_file_scope=use_scope,
+            use_incremental=use_incremental,
+        )
+    )
+
+    return JSONResponse({
+        "batch_scan_id": batch_scan_id,
+        "project_name": ctx.name,
+        "batch_count": plan.batch_count,
+        "total_java_files": plan.total_java_files,
+        "strategy": plan.strategy,
+        "redirect": f"/scans/batch/{batch_scan_id}",
+    })
+
+
+@app.get("/scans/batch/{batch_scan_id}", response_class=HTMLResponse)
+async def batch_scan_view(request: Request, batch_scan_id: str):
+    """Live progress page for a batch scan."""
+    batch_state = _active_batch_scans.get(batch_scan_id)
+    if not batch_state:
+        raise HTTPException(status_code=404, detail="Batch scan not found")
+    return templates.TemplateResponse(
+        request,
+        "batch_run.html",
+        {
+            "batch_scan_id": batch_scan_id,
+            "initial_state": batch_state.to_dict(),
+        },
+    )
+
+
+@app.get("/api/batch-scans/{batch_scan_id}")
+async def api_get_batch_scan(batch_scan_id: str, request: Request):
+    batch_state = _active_batch_scans.get(batch_scan_id)
+    if not batch_state:
+        raise HTTPException(status_code=404, detail="Batch scan not found")
+    return JSONResponse(batch_state.to_dict())
+
+
+@app.get("/api/batch-scans/{batch_scan_id}/stream")
+async def api_batch_scan_stream(batch_scan_id: str, request: Request):
+    """SSE stream for a batch scan — replays history then live events."""
+    batch_state = _active_batch_scans.get(batch_scan_id)
+    if not batch_state:
+        raise HTTPException(status_code=404, detail="Batch scan not found")
+
+    queue = batch_state.subscribe()
+
+    async def _event_gen():
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=20)
+                    yield f"data: {json.dumps(event)}\n\n"
+                    if event.get("type") == "batch_complete":
+                        break
+                except asyncio.TimeoutError:
+                    yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
+        finally:
+            batch_state.unsubscribe(queue)
+
+    return StreamingResponse(
+        _event_gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/api/scan/estimate")
