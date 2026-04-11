@@ -9,72 +9,122 @@
 {% endblock %}
 
 {% block content %}
-<div style="padding:32px 40px; max-width:960px;" x-data="liveScan()" x-init="init()">
+<div style="padding:28px 36px; max-width:1040px;" x-data="liveScan()" x-init="init()">
 
   <!-- Header -->
-  <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:28px;">
+  <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
     <div>
-      <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+      <div style="display:flex; align-items:center; gap:8px; margin-bottom:5px;">
         <a href="/" style="color:var(--muted); font-size:12px;">Dashboard</a>
         <span style="color:var(--muted);">›</span>
-        <span style="font-size:12px; color:var(--muted);">{{ initial_state.project_name or run_id }}</span>
+        <span style="font-size:12px; color:var(--muted);" x-text="state.project_name || '{{ initial_state.project_name }}'"></span>
       </div>
-      <h1 style="font-size:20px; font-weight:700; margin:0 0 4px; display:flex; align-items:center; gap:10px;">
+      <h1 style="font-size:20px; font-weight:700; margin:0 0 4px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
         <span x-text="state.project_name || '{{ initial_state.project_name }}'"></span>
-        <span x-bind:class="statusBadgeClass(state.status)" class="badge" style="font-size:11px;" x-text="statusLabel(state.status)"></span>
+        <span x-bind:class="statusBadgeClass(state.status)" class="badge" x-text="statusLabel(state.status)"></span>
       </h1>
       <div style="color:var(--muted); font-size:12px; font-family:monospace; word-break:break-all;" x-text="state.repo_url || '{{ initial_state.repo_url }}'"></div>
     </div>
 
-    <!-- Live stats -->
-    <div style="display:flex; gap:16px; flex-shrink:0;">
-      <div class="card" style="padding:12px 18px; text-align:center; min-width:90px;">
-        <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px;">Findings</div>
-        <div style="font-size:26px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--orange);" x-text="state.findings_count"></div>
+    <!-- Stats -->
+    <div style="display:flex; gap:10px; flex-shrink:0; flex-wrap:wrap;">
+      <div class="card" style="padding:10px 16px; text-align:center; min-width:80px;">
+        <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px;">Findings</div>
+        <div style="font-size:24px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--orange);" x-text="state.findings_count || 0"></div>
       </div>
-      <div class="card" style="padding:12px 18px; text-align:center; min-width:90px;">
-        <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px;">Progress</div>
-        <div style="font-size:26px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--text);" x-text="progressPct() + '%'"></div>
+      <div class="card" style="padding:10px 16px; text-align:center; min-width:80px;">
+        <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px;">Progress</div>
+        <div style="font-size:24px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--text);" x-text="progressPct() + '%'"></div>
+      </div>
+      <div class="card" style="padding:10px 16px; text-align:center; min-width:80px;">
+        <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px;">Java Files</div>
+        <div style="font-size:24px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--blue);" x-text="state.total_java_files || '—'"></div>
+      </div>
+      <div class="card" style="padding:10px 16px; text-align:center; min-width:80px;">
+        <div style="font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:3px;">Elapsed</div>
+        <div style="font-size:24px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--text);" x-text="elapsedTime()"></div>
       </div>
     </div>
   </div>
 
   <!-- Progress bar -->
-  <div style="margin-bottom:28px;">
-    <div class="score-bar" style="height:7px;">
+  <div style="margin-bottom:20px;">
+    <div class="score-bar" style="height:6px;">
       <div class="score-fill"
            :class="state.status === 'complete' ? 'score-fill-green' : 'score-fill-yellow'"
            :style="'width:' + progressPct() + '%'"></div>
     </div>
-    <div style="display:flex; justify-content:space-between; margin-top:6px; font-size:11px; color:var(--muted);">
+    <div style="display:flex; justify-content:space-between; margin-top:5px; font-size:11px; color:var(--muted);">
       <span x-text="completedCount() + ' of ' + totalCount() + ' agents done'"></span>
-      <span x-text="elapsedTime()"></span>
+      <span x-text="runningAgentSummary()"></span>
     </div>
   </div>
 
-  <!-- Agent cards grid -->
-  <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px; margin-bottom:28px;">
+  <!-- ── Agent Cards ── -->
+  <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:10px; margin-bottom:20px;">
     <template x-for="(status, agentId) in state.agents" :key="agentId">
-      <div class="card" style="padding:16px;" :class="agentCardClass(status)">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-          <div style="display:flex; align-items:center; gap:8px;">
-            <div class="dot" :class="'dot-' + status" style="position:relative;"></div>
+      <div class="card agent-card"
+           style="padding:14px; cursor:pointer; transition:border-color .15s;"
+           :class="agentCardClass(status)"
+           @click="toggleAgent(agentId)">
+
+        <!-- Row 1: name + id -->
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:7px;">
+          <div style="display:flex; align-items:center; gap:7px;">
+            <div class="dot" :class="'dot-' + status"></div>
             <span style="font-size:13px; font-weight:600; color:var(--text);" x-text="state.agent_names[agentId] || agentId"></span>
           </div>
-          <span style="font-size:10px; font-family:monospace; color:var(--muted);" x-text="agentId"></span>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="font-size:10px; font-family:monospace; color:var(--muted);" x-text="agentId"></span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 :style="expandedAgent === agentId ? 'transform:rotate(180deg); transition:.2s' : 'transition:.2s'"
+                 style="color:var(--muted)"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
         </div>
-        <!-- Model badge -->
-        <div style="display:flex; align-items:center; gap:6px;">
+
+        <!-- Row 2: badges + stats -->
+        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:6px;">
           <span class="badge"
             :class="modelBadgeClass(state.agent_models && state.agent_models[agentId])"
             x-text="modelShort(state.agent_models && state.agent_models[agentId])"></span>
-          <span class="badge"
-            :class="statusBadgeClass(status)"
-            x-text="statusLabel(status)"></span>
+          <span class="badge" :class="statusBadgeClass(status)" x-text="statusLabel(status)"></span>
+          <!-- File count when running or complete -->
+          <span x-show="state.agent_java_files && state.agent_java_files[agentId]"
+                style="font-size:11px; color:var(--muted);">
+            <span x-text="state.agent_java_files[agentId]"></span> files
+          </span>
+          <!-- Findings count when complete -->
+          <span x-show="(state.agent_findings && state.agent_findings[agentId] !== undefined) && status === 'complete'"
+                style="font-size:11px;"
+                :style="(state.agent_findings[agentId] || 0) > 0 ? 'color:var(--orange)' : 'color:var(--muted)'">
+            <span x-text="state.agent_findings[agentId] || 0"></span>
+            <span x-text="(state.agent_findings[agentId] || 0) === 1 ? ' finding' : ' findings'"></span>
+          </span>
         </div>
-        <!-- Finding count for completed agents -->
-        <div x-show="agentFindings[agentId]" style="margin-top:8px; font-size:12px; color:var(--muted);">
-          <span x-text="agentFindings[agentId]"></span> finding<span x-show="agentFindings[agentId] !== 1">s</span>
+
+        <!-- Row 3: elapsed time for running agents -->
+        <div x-show="status === 'running'" style="font-size:11px; color:var(--muted);">
+          <span x-text="agentElapsed(agentId)"></span>
+        </div>
+
+        <!-- Row 4: last log line preview -->
+        <div x-show="state.agent_logs && state.agent_logs[agentId] && state.agent_logs[agentId].length > 0"
+             style="margin-top:5px; font-size:11px; color:var(--muted); font-family:monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; opacity:.8;"
+             x-text="(state.agent_logs[agentId] || []).slice(-1)[0] || ''"></div>
+
+        <!-- Expanded log panel -->
+        <div x-show="expandedAgent === agentId" x-cloak
+             @click.stop
+             style="margin-top:10px; border-top:1px solid var(--border); padding-top:10px;">
+          <div style="font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:6px;">
+            Agent Logs
+          </div>
+          <div style="background:var(--surface); border:1px solid var(--border); border-radius:5px; padding:8px 10px; max-height:180px; overflow-y:auto; font-family:monospace; font-size:11px; line-height:1.6;" id="agent-log-panel">
+            <template x-for="(line, i) in (state.agent_logs[agentId] || [])" :key="i">
+              <div :style="logLineColor(line)" x-text="line"></div>
+            </template>
+            <div x-show="!(state.agent_logs[agentId] || []).length" style="color:var(--muted);">No logs yet…</div>
+          </div>
         </div>
       </div>
     </template>
@@ -82,68 +132,76 @@
 
   <!-- Complete panel -->
   <div x-show="state.status === 'complete'" x-cloak>
-    <div class="card" style="padding:24px; border-color:rgba(34,197,94,.3); background:rgba(34,197,94,.04);">
+    <div class="card" style="padding:20px 24px; margin-bottom:20px; border-color:rgba(34,197,94,.3); background:rgba(34,197,94,.04);">
       <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px;">
         <div>
-          <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-            <span style="font-size:16px; font-weight:700; color:var(--green);">Scan Complete</span>
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:5px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <span style="font-size:15px; font-weight:700; color:var(--green);">Scan Complete</span>
           </div>
           <div style="color:var(--muted); font-size:13px;">
-            Found <strong style="color:var(--text);" x-text="state.findings_count"></strong> issues in
+            Found <strong style="color:var(--text);" x-text="state.findings_count"></strong> issues across
+            <strong style="color:var(--text);" x-text="completedCount()"></strong> agents in
             <strong style="color:var(--text);" x-text="elapsedTime()"></strong>
           </div>
         </div>
-
-        <!-- Score pills -->
-        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
           <template x-for="(val, key) in state.scores" :key="key">
-            <div class="card" style="padding:10px 14px; text-align:center;" x-show="key !== 'overall'">
-              <div style="font-size:10px; color:var(--muted); text-transform:capitalize; margin-bottom:2px;" x-text="key.replace('_',' ')"></div>
-              <div style="font-size:20px; font-weight:700;" :style="'color:' + scoreColor(val)" x-text="val"></div>
+            <div class="card" style="padding:8px 12px; text-align:center;" x-show="key !== 'overall'">
+              <div style="font-size:10px; color:var(--muted); text-transform:capitalize; margin-bottom:1px;" x-text="key.replace(/_/g,' ')"></div>
+              <div style="font-size:18px; font-weight:700;" :style="'color:' + scoreColor(val)" x-text="val"></div>
             </div>
           </template>
+          <a :href="'/scans/{{ run_id }}/report'" class="btn-primary" style="text-decoration:none;">
+            View Full Report →
+          </a>
         </div>
-
-        <a :href="'/scans/{{ run_id }}/report'" class="btn-primary" style="text-decoration:none;">
-          View Full Report →
-        </a>
       </div>
     </div>
   </div>
 
   <!-- Failed panel -->
   <div x-show="state.status === 'failed'" x-cloak>
-    <div class="card" style="padding:20px 24px; border-color:rgba(239,68,68,.3); background:rgba(239,68,68,.04);">
-      <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+    <div class="card" style="padding:18px 22px; margin-bottom:20px; border-color:rgba(239,68,68,.3); background:rgba(239,68,68,.04);">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:5px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
         <span style="color:var(--red); font-weight:600;">Scan Failed</span>
       </div>
-      <div style="color:var(--muted); font-size:13px; font-family:monospace;" x-text="state.error"></div>
+      <div style="color:var(--muted); font-size:12px; font-family:monospace;" x-text="state.error"></div>
     </div>
   </div>
 
-  <!-- Live event log -->
-  <div style="margin-top:28px;">
-    <h3 style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 10px;">Event Log</h3>
-    <div class="card" style="padding:14px; max-height:240px; overflow-y:auto;" id="event-log">
-      <template x-for="(evt, i) in eventLog" :key="i">
-        <div style="display:flex; align-items:baseline; gap:10px; padding:3px 0; font-size:12px; border-bottom:1px solid var(--border);" x-show="evt.type !== 'heartbeat'">
-          <span style="color:var(--muted); flex-shrink:0; font-family:monospace;" x-text="formatTime(evt.timestamp)"></span>
+  <!-- ── Live Event Log ── -->
+  <div>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+      <h3 style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin:0;">Event Log</h3>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <label style="display:flex; align-items:center; gap:5px; font-size:11px; color:var(--muted); cursor:pointer;">
+          <input type="checkbox" x-model="showAgentLogs" style="accent-color:var(--orange);">
+          Show agent logs
+        </label>
+        <button @click="clearLog()" style="font-size:11px; color:var(--muted); background:none; border:none; cursor:pointer; padding:2px 6px;">Clear</button>
+      </div>
+    </div>
+    <div class="card" style="padding:12px; max-height:260px; overflow-y:auto; font-family:monospace; font-size:11px; line-height:1.7;" id="event-log">
+      <template x-for="(evt, i) in filteredLog" :key="i">
+        <div style="display:flex; align-items:baseline; gap:8px; padding:1px 0;" x-show="evt.type !== 'heartbeat'">
+          <span style="color:var(--muted); flex-shrink:0; min-width:70px;" x-text="formatTime(evt.timestamp)"></span>
           <span :style="eventColor(evt.type)" x-text="formatEvent(evt)"></span>
         </div>
       </template>
-      <div x-show="eventLog.length === 0" style="color:var(--muted); font-size:12px;">Waiting for events…</div>
+      <div x-show="filteredLog.length === 0" style="color:var(--muted);">Waiting for events…</div>
     </div>
   </div>
 
 </div>
 
 <style>
-[x-cloak] { display: none !important; }
-.agent-card-running { border-color: rgba(59,130,246,.3) !important; background: rgba(59,130,246,.03) !important; }
-.agent-card-complete { border-color: rgba(34,197,94,.2) !important; }
-.agent-card-failed  { border-color: rgba(239,68,68,.2) !important; }
+[x-cloak] { display:none !important; }
+.agent-card { user-select:none; }
+.agent-card-running { border-color:rgba(59,130,246,.35) !important; background:rgba(59,130,246,.03) !important; }
+.agent-card-complete { border-color:rgba(34,197,94,.25) !important; }
+.agent-card-failed { border-color:rgba(239,68,68,.25) !important; }
 </style>
 
 <script>
@@ -152,40 +210,44 @@ const INITIAL_STATE = {{ initial_state | tojson }};
 
 function liveScan() {
   return {
-    state: { ...INITIAL_STATE },
+    state: JSON.parse(JSON.stringify(INITIAL_STATE)),
     eventLog: [],
-    agentFindings: {},
+    showAgentLogs: false,
+    expandedAgent: null,
+    agentStartEpoch: {},   // agent_id -> epoch ms
     startTime: Date.now(),
     elapsedSecs: 0,
     _timer: null,
     _es: null,
 
-    init() {
-      // Start elapsed timer
-      this._timer = setInterval(() => this.elapsedSecs++, 1000);
+    get filteredLog() {
+      if (this.showAgentLogs) return this.eventLog;
+      return this.eventLog.filter(e => e.type !== 'agent_log');
+    },
 
-      // Connect SSE
+    init() {
+      this._timer = setInterval(() => this.elapsedSecs++, 1000);
       this._es = new EventSource(`/api/runs/${RUN_ID}/stream`);
       this._es.onmessage = (e) => {
         try { this.handleEvent(JSON.parse(e.data)); } catch(ex) {}
       };
       this._es.onerror = () => {
-        // SSE closed — scan may have finished, reload after short delay
         this._es.close();
         if (this.state.status !== 'complete') {
           setTimeout(() => {
             fetch(`/api/runs/${RUN_ID}`)
               .then(r => r.json())
-              .then(d => { if (d.status === 'complete') window.location.href = `/scans/${RUN_ID}/report`; })
+              .then(d => {
+                if (d.status === 'complete') window.location.href = `/scans/${RUN_ID}/report`;
+              })
               .catch(() => {});
-          }, 1000);
+          }, 1200);
         }
       };
     },
 
     handleEvent(evt) {
       this.eventLog.push(evt);
-      // Auto-scroll log
       this.$nextTick(() => {
         const el = document.getElementById('event-log');
         if (el) el.scrollTop = el.scrollHeight;
@@ -193,24 +255,68 @@ function liveScan() {
 
       if (evt.type === 'scan_started') {
         this.state.status = 'running';
+        if (evt.total_java_files) this.state.total_java_files = evt.total_java_files;
+
       } else if (evt.type === 'agent_update') {
         this.state.agents[evt.agent_id] = evt.status;
+        if (evt.status === 'running') {
+          this.agentStartEpoch[evt.agent_id] = Date.now();
+        }
+        if (evt.java_files) {
+          if (!this.state.agent_java_files) this.state.agent_java_files = {};
+          this.state.agent_java_files[evt.agent_id] = evt.java_files;
+        }
+
+      } else if (evt.type === 'agent_log') {
+        if (!this.state.agent_logs) this.state.agent_logs = {};
+        if (!this.state.agent_logs[evt.agent_id]) this.state.agent_logs[evt.agent_id] = [];
+        this.state.agent_logs[evt.agent_id].push(evt.message);
+        // Keep only last 200 lines
+        if (this.state.agent_logs[evt.agent_id].length > 200) {
+          this.state.agent_logs[evt.agent_id].shift();
+        }
+
       } else if (evt.type === 'findings_update') {
-        this.agentFindings[evt.agent_id] = evt.count;
+        if (!this.state.agent_findings) this.state.agent_findings = {};
+        this.state.agent_findings[evt.agent_id] = evt.count;
         this.state.findings_count = evt.total;
+
       } else if (evt.type === 'run_complete') {
         this.state.status = 'complete';
         this.state.findings_count = evt.findings_count;
         this.state.scores = evt.scores || {};
         this.state.completed_at = evt.completed_at;
+        if (evt.agent_findings) this.state.agent_findings = evt.agent_findings;
         clearInterval(this._timer);
         this._es.close();
+
       } else if (evt.type === 'scan_failed') {
         this.state.status = 'failed';
         this.state.error = evt.error;
         clearInterval(this._timer);
         this._es.close();
       }
+    },
+
+    toggleAgent(agentId) {
+      this.expandedAgent = this.expandedAgent === agentId ? null : agentId;
+    },
+
+    clearLog() { this.eventLog = []; },
+
+    agentElapsed(agentId) {
+      const epoch = this.agentStartEpoch[agentId];
+      if (!epoch) return '';
+      const s = Math.floor((Date.now() - epoch) / 1000);
+      return s < 60 ? `${s}s` : `${Math.floor(s/60)}m ${s%60}s`;
+    },
+
+    runningAgentSummary() {
+      const running = Object.entries(this.state.agents || {})
+        .filter(([,s]) => s === 'running')
+        .map(([id]) => this.state.agent_names[id] || id);
+      if (!running.length) return this.elapsedTime();
+      return `Running: ${running.slice(0,3).join(', ')}${running.length > 3 ? ` +${running.length-3}` : ''}`;
     },
 
     progressPct() {
@@ -233,10 +339,10 @@ function liveScan() {
     },
 
     statusLabel(s) {
-      return { pending: 'Pending', running: 'Running', complete: 'Complete', failed: 'Failed' }[s] || s;
+      return {pending:'Pending',running:'Running',complete:'Complete',failed:'Failed'}[s] || s;
     },
     statusBadgeClass(s) {
-      return { pending: 'badge-gray', running: 'badge-blue', complete: 'badge-green', failed: 'badge-red' }[s] || 'badge-gray';
+      return {pending:'badge-gray',running:'badge-blue',complete:'badge-green',failed:'badge-red'}[s] || 'badge-gray';
     },
     agentCardClass(s) {
       return s === 'running' ? 'agent-card-running' : s === 'complete' ? 'agent-card-complete' : s === 'failed' ? 'agent-card-failed' : '';
@@ -256,29 +362,36 @@ function liveScan() {
       return 'badge-gray';
     },
     scoreColor(v) {
-      if (v >= 80) return 'var(--green)';
-      if (v >= 60) return 'var(--yellow)';
-      return 'var(--red)';
+      if (v >= 80) return 'var(--green)'; if (v >= 60) return 'var(--yellow)'; return 'var(--red)';
     },
-
+    logLineColor(line) {
+      if (!line) return '';
+      if (/complete|found|done/i.test(line)) return 'color:var(--green)';
+      if (/error|fail|timeout/i.test(line)) return 'color:var(--red)';
+      if (/CRITICAL|HIGH/i.test(line)) return 'color:var(--orange)';
+      if (/still analyzing|elapsed/i.test(line)) return 'color:var(--yellow)';
+      return 'color:var(--muted)';
+    },
     formatTime(ts) {
       if (!ts) return '';
       try { return new Date(ts).toLocaleTimeString('en', {hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
-      catch(e) { return ts.slice(11, 19) || ''; }
+      catch(e) { return ts.slice(11,19) || ''; }
     },
     formatEvent(evt) {
-      if (evt.type === 'scan_started') return `Scan started — ${evt.agent_count} agent(s) queued`;
-      if (evt.type === 'agent_update') return `[${evt.agent_id}] ${evt.agent_name}: ${evt.status}`;
-      if (evt.type === 'findings_update') return `[${evt.agent_id}] ${evt.count} finding(s) discovered (total: ${evt.total})`;
-      if (evt.type === 'run_complete') return `✓ Scan complete — ${evt.findings_count} finding(s) total`;
-      if (evt.type === 'scan_failed') return `✗ Scan failed: ${evt.error}`;
+      if (evt.type === 'scan_started')    return `Scan started — ${evt.agent_count} agent(s), ${evt.total_java_files || '?'} Java files`;
+      if (evt.type === 'agent_update')    return `[${evt.agent_id}] ${evt.agent_name || evt.agent_id}: ${evt.status}`;
+      if (evt.type === 'agent_log')       return `[${evt.agent_id}] ${evt.message}`;
+      if (evt.type === 'findings_update') return `[${evt.agent_id}] ${evt.count} finding(s) — total: ${evt.total}`;
+      if (evt.type === 'run_complete')    return `✓ Scan complete — ${evt.findings_count} finding(s)`;
+      if (evt.type === 'scan_failed')     return `✗ Failed: ${evt.error}`;
       return evt.type;
     },
     eventColor(type) {
-      if (type === 'run_complete') return 'color:var(--green)';
-      if (type === 'scan_failed')  return 'color:var(--red)';
-      if (type === 'agent_update') return 'color:var(--text)';
-      return 'color:var(--muted)';
+      if (type === 'run_complete')    return 'color:var(--green)';
+      if (type === 'scan_failed')     return 'color:var(--red)';
+      if (type === 'agent_log')       return 'color:var(--muted); opacity:.7';
+      if (type === 'findings_update') return 'color:var(--orange)';
+      return 'color:var(--text)';
     },
   };
 }

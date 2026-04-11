@@ -953,39 +953,83 @@
   <div class="container">
     <div class="section-label">06 Interfaces</div>
     <h2 class="section-title">Use it how<br/>you work.</h2>
-    <div class="grid-3">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.5rem;margin-bottom:1.5rem">
 
+      <!-- CLI -->
       <div class="card">
         <div style="font-size:1.75rem;margin-bottom:1rem">⌨️</div>
         <h3 style="font-weight:700;margin-bottom:.5rem">CLI</h3>
-        <p style="font-size:.875rem;color:var(--text-mid);margin-bottom:1rem">Full analysis from your terminal. Pipe findings into CI, Slack webhooks, or JIRA.</p>
+        <p style="font-size:.875rem;color:var(--text-mid);margin-bottom:1rem">Full analysis from your terminal. Pipe findings into CI, Slack webhooks, or JIRA. Debug agent progress with <code>--verbose</code>.</p>
         <pre style="font-size:.78rem"><code>springinsight run ./my-app
+springinsight run https://github.com/org/repo
+springinsight run ./app --agents A03,A10,A12
+springinsight agents          # list + enable/disable
 springinsight report --severity HIGH
-springinsight findings --agent A02
 springinsight history</code></pre>
       </div>
 
+      <!-- Web UI -->
       <div class="card">
         <div style="font-size:1.75rem;margin-bottom:1rem">🌐</div>
         <h3 style="font-weight:700;margin-bottom:.5rem">Web UI</h3>
-        <p style="font-size:.875rem;color:var(--text-mid);margin-bottom:1rem">Dark-themed dashboard with SSE live progress, score gauges, and a filterable findings table.</p>
+        <p style="font-size:.875rem;color:var(--text-mid);margin-bottom:1rem">Dark dashboard with live SSE progress, clickable agent cards showing per-agent logs, agent enable/disable, and score history.</p>
         <pre style="font-size:.78rem"><code>springinsight web --open
-# Opens http://localhost:8080
-# Paste GitHub URL → scan starts
-# Live agent progress stream
-# Persistent history in SQLite</code></pre>
+springinsight web --verbose   # agent logs in terminal
+# → http://localhost:8080
+# Click any agent card for live logs
+# Settings → Agents to control cost
+# Shared DB between CLI + Web UI</code></pre>
       </div>
 
+      <!-- MCP Server -->
       <div class="card">
         <div style="font-size:1.75rem;margin-bottom:1rem">🔌</div>
-        <h3 style="font-weight:700;margin-bottom:.5rem">MCP Server <span class="tag tag-yellow" style="font-size:.65rem">Coming Soon</span></h3>
-        <p style="font-size:.875rem;color:var(--text-mid);margin-bottom:1rem">Expose SpringInsight tools directly to Claude Code, Cursor, or Cline via the Model Context Protocol.</p>
-        <pre style="font-size:.78rem"><code># In Claude Code:
-> run_springinsight(url="...")
-> get_findings(severity="CRITICAL")
-> get_dependency_graph()</code></pre>
+        <h3 style="font-weight:700;margin-bottom:.5rem">MCP Server <span class="tag tag-green" style="font-size:.65rem">Live</span></h3>
+        <p style="font-size:.875rem;color:var(--text-mid);margin-bottom:1rem">Use SpringInsight tools directly from Claude Code, Cursor, or Cline via the Model Context Protocol.</p>
+        <pre style="font-size:.78rem"><code>pip install "springinsight[mcp]"
+
+# Add to MCP config:
+{
+  "mcpServers": {
+    "springinsight": {
+      "command": "springinsight",
+      "args": ["mcp"]
+    }
+  }
+}</code></pre>
       </div>
 
+      <!-- VS Code -->
+      <div class="card">
+        <div style="font-size:1.75rem;margin-bottom:1rem">🧩</div>
+        <h3 style="font-weight:700;margin-bottom:.5rem">VS Code Extension <span class="tag tag-green" style="font-size:.65rem">Beta</span></h3>
+        <p style="font-size:.875rem;color:var(--text-mid);margin-bottom:1rem">Scan from the command palette. Findings appear as diagnostics in the Problems panel with inline gutter icons.</p>
+        <pre style="font-size:.78rem"><code># Install from marketplace:
+SpringInsight (search in VS Code)
+
+# Or build from source:
+cd vscode-extension
+npm install &amp;&amp; npm run compile
+
+# Commands:
+⌘⇧P → SpringInsight: Scan Project
+⌘⇧P → SpringInsight: Quick Scan</code></pre>
+      </div>
+
+    </div>
+
+    <!-- Agent cost control callout -->
+    <div class="card" style="padding:1.5rem;border-color:rgba(234,179,8,.2);background:rgba(234,179,8,.04);display:flex;align-items:flex-start;gap:1rem;margin-top:1rem">
+      <div style="font-size:1.5rem;flex-shrink:0">💡</div>
+      <div>
+        <div style="font-weight:700;margin-bottom:.3rem">Control cost with Agent Config</div>
+        <p style="font-size:.875rem;color:var(--text-mid)">
+          Running all 15 agents costs $3–8 per large project. For quick checks, enable only Phase 1 agents (Haiku, ~$0.05 total).
+          Disable expensive Opus agents (A05 Architecture, A08 LLD) unless you need deep architecture analysis.
+          Use the <strong style="color:var(--text)">Settings → Agents</strong> page in the Web UI, or the CLI:
+          <code>springinsight agents</code>.
+        </p>
+      </div>
     </div>
   </div>
 </section>
@@ -1007,9 +1051,10 @@ springinsight history</code></pre>
         <div class="price-cost">Free <span>forever</span></div>
         <div class="price-desc">Full feature set. Runs on your machine. Code never leaves your infrastructure.</div>
         <ul class="price-features">
-          <li>All 15 agents (Phase 1 + 2 live now)</li>
-          <li>CLI + Web UI included</li>
-          <li>SQLite persistent history</li>
+          <li>All 15 agents across 4 phases</li>
+          <li>CLI + Web UI + MCP Server + VS Code extension</li>
+          <li>Agent enable/disable for cost control</li>
+          <li>SQLite persistent history — shared across tools</li>
           <li>GitHub URL + local path support</li>
           <li>MIT license — use in commercial projects</li>
         </ul>

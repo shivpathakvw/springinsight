@@ -1,13 +1,4 @@
-"""SpringInsight Web Application — FastAPI backend.
-
-Start with:
-    springinsight web --port 8080
-
-Or programmatically:
-    import uvicorn
-    from springinsight.web.app import app
-    uvicorn.run(app, host="0.0.0.0", port=8080)
-"""
+"""SpringInsight Web Application — FastAPI backend."""
 
 from __future__ import annotations
 
@@ -26,6 +17,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from ..agents.registry import AGENT_REGISTRY, get_enabled_agents
+from ..agents.config import (
+    get_agents_with_config,
+    load_agent_config,
+    save_agent_config,
+    is_agent_enabled,
+)
 from ..context.loader import ProjectContext, load_context
 from ..db.database import get_db, init_db
 from ..db.models import AgentRun, Finding, Run
@@ -40,7 +37,8 @@ def _data_dir() -> Path:
     env = os.environ.get("SPRINGINSIGHT_DATA_DIR")
     if env:
         return Path(env).expanduser().resolve()
-    return Path.home() / ".springinsight" / "web"
+    # Use the same global directory as the CLI so both share the same database
+    return Path.home() / ".springinsight"
 
 
 # ── Application lifespan ───────────────────────────────────────────────────────
@@ -51,13 +49,10 @@ async def lifespan(application: FastAPI):
     data_dir.mkdir(parents=True, exist_ok=True)
     (data_dir / "repos").mkdir(exist_ok=True)
     (data_dir / "runs").mkdir(exist_ok=True)
-    # Load .env for ANTHROPIC_API_KEY
     load_env(data_dir)
-    # Initialize SQLite
     init_db(data_dir)
     application.state.data_dir = data_dir
     yield
-    # Cleanup: nothing required
 
 
 # ── FastAPI instance ───────────────────────────────────────────────────────────
@@ -65,7 +60,7 @@ async def lifespan(application: FastAPI):
 app = FastAPI(
     title="SpringInsight",
     description="Autonomous multi-agent codebase intelligence for Java / Spring Boot",
-    version="0.1.0",
+    version="0.3.0",
     docs_url="/api/docs",
     redoc_url=None,
     lifespan=lifespan,
@@ -95,14 +90,22 @@ templates.env.globals["score_color"] = _score_color
 async def home(request: Request):
     """Dashboard — recent scans + new scan form."""
     runs: list[Run] = []
+    run_finding_counts: dict[str, int] = {}
+
     try:
+        from sqlalchemy import func as sqlfunc
         with get_db() as db:
             runs = db.query(Run).order_by(Run.started_at.desc()).limit(20).all()
+            # Compute findings counts BEFORE expunge to avoid lazy-load crash
+            for r in runs:
+                cnt = db.query(sqlfunc.count(Finding.id)).filter(
+                    Finding.run_id == r.id
+                ).scalar() or 0
+                run_finding_counts[r.id] = cnt
             db.expunge_all()
     except Exception:
         pass
 
-    # Merge any live scans not yet in DB
     live_runs = [
         s for s in _active_scans.values()
         if s.status in ("pending", "running")
@@ -114,13 +117,13 @@ async def home(request: Request):
         {
             "db_runs": runs,
             "live_runs": live_runs,
+            "run_finding_counts": run_finding_counts,
         },
     )
 
 
 @app.get("/scans/{run_id}", response_class=HTMLResponse)
 async def scan_live(request: Request, run_id: str):
-    """Live scan progress page (redirects to report if already done)."""
     state = _active_scans.get(run_id)
     if state and state.status in ("pending", "running"):
         return templates.TemplateResponse(
@@ -128,14 +131,11 @@ async def scan_live(request: Request, run_id: str):
             "run.html",
             {"run_id": run_id, "initial_state": state.to_dict()},
         )
-    # Already finished — go straight to the report
     return RedirectResponse(f"/scans/{run_id}/report", status_code=302)
 
 
 @app.get("/scans/{run_id}/report", response_class=HTMLResponse)
 async def scan_report(request: Request, run_id: str):
-    """Full report page for a completed scan."""
-    # Check live state first (may still be running)
     state = _active_scans.get(run_id)
     if state and state.status in ("pending", "running"):
         return RedirectResponse(f"/scans/{run_id}", status_code=302)
@@ -145,9 +145,7 @@ async def scan_report(request: Request, run_id: str):
             run = db.query(Run).filter(Run.id == run_id).first()
             if not run:
                 raise HTTPException(status_code=404, detail="Run not found")
-            agent_runs = (
-                db.query(AgentRun).filter(AgentRun.run_id == run_id).all()
-            )
+            agent_runs = db.query(AgentRun).filter(AgentRun.run_id == run_id).all()
             findings = (
                 db.query(Finding)
                 .filter(Finding.run_id == run_id)
@@ -158,7 +156,6 @@ async def scan_report(request: Request, run_id: str):
     except HTTPException:
         raise
     except Exception as exc:
-        # If DB isn't ready yet or scan is very fresh, use in-memory state
         if state:
             return templates.TemplateResponse(
                 request,
@@ -167,7 +164,6 @@ async def scan_report(request: Request, run_id: str):
             )
         raise HTTPException(status_code=404, detail="Run not found") from exc
 
-    # Group findings by severity
     from collections import Counter
     severity_counts = Counter(f.severity for f in findings)
 
@@ -184,6 +180,44 @@ async def scan_report(request: Request, run_id: str):
     )
 
 
+# ── Agent Configuration UI ────────────────────────────────────────────────────
+
+@app.get("/settings/agents", response_class=HTMLResponse)
+async def settings_agents(request: Request):
+    """Agent enable/disable configuration page."""
+    agents_with_config = get_agents_with_config()
+
+    # Compute cost estimates per model tier
+    # Sonnet: ~$3/$15 per M tokens, Haiku: ~$0.25/$1.25, Opus: ~$15/$75
+    model_cost_label = {
+        "haiku": "~$0.03 avg",
+        "sonnet": "~$0.25 avg",
+        "opus": "~$1.50 avg",
+    }
+
+    for a in agents_with_config:
+        model_key = "haiku"
+        if "haiku" in a["model"]:
+            model_key = "haiku"
+        elif "sonnet" in a["model"]:
+            model_key = "sonnet"
+        elif "opus" in a["model"]:
+            model_key = "opus"
+        a["cost_label"] = model_cost_label.get(model_key, "")
+        a["model_short"] = model_key.capitalize()
+
+    # Current config (for JS initialisation)
+    current_config = load_agent_config()
+    # Fill in defaults for all agents
+    full_config = {a["id"]: current_config.get(a["id"], True) for a in agents_with_config}
+
+    return templates.TemplateResponse(
+        request,
+        "agents.html",
+        {"agents": agents_with_config, "config_json": full_config},
+    )
+
+
 # ── JSON API Routes ───────────────────────────────────────────────────────────
 
 @app.post("/api/scan")
@@ -197,15 +231,11 @@ async def api_start_scan(request: Request):
     requested_agents: str | list = body.get("agents", "all")
     data_dir = request.app.state.data_dir
 
-    # Resolve project path (clone GitHub repos automatically)
     try:
-        project_path, source_type, source_url = resolve_project_path(
-            repo_url, data_dir
-        )
+        project_path, source_type, source_url = resolve_project_path(repo_url, data_dir)
     except Exception as exc:
         return JSONResponse({"error": f"Cannot resolve project: {exc}"}, status_code=400)
 
-    # Load or create context
     try:
         ctx = load_context(project_path)
     except Exception:
@@ -213,14 +243,18 @@ async def api_start_scan(request: Request):
         ctx.name = project_path.name
         ctx.base_path = str(project_path)
 
-    # Resolve agents to run
+    # Filter by both requested and enabled-in-config
     agents = get_enabled_agents(requested_agents)
+    # Apply user's enable/disable config
+    agent_config = load_agent_config()
+    if agent_config:
+        agents = [a for a in agents if agent_config.get(a.id, True)]
+
     if not agents:
-        return JSONResponse({"error": "No enabled agents found"}, status_code=400)
+        return JSONResponse({"error": "No enabled agents found. Check Settings → Agents."}, status_code=400)
 
     run_id = uuid.uuid4().hex[:8]
 
-    # Persist initial Run record
     try:
         with get_db() as db:
             run = Run(
@@ -236,9 +270,8 @@ async def api_start_scan(request: Request):
             )
             db.add(run)
     except Exception:
-        pass  # Non-fatal — we continue with in-memory state
+        pass
 
-    # Build in-memory scan state
     state = ScanState(
         run_id=run_id,
         repo_url=repo_url,
@@ -249,7 +282,6 @@ async def api_start_scan(request: Request):
     )
     _active_scans[run_id] = state
 
-    # Launch background coroutine (fire and forget)
     asyncio.create_task(
         run_scan_background(state, ctx, project_path, data_dir, agents)
     )
@@ -264,14 +296,27 @@ async def api_start_scan(request: Request):
     )
 
 
+@app.post("/api/settings/agents")
+async def api_save_agent_config(request: Request):
+    """Save agent enabled/disabled config. Body: {agent_id: bool, ...}"""
+    body = await request.json()
+    # Validate — only known agents
+    valid = {aid: bool(v) for aid, v in body.items() if aid in AGENT_REGISTRY}
+    save_agent_config(valid)
+    return JSONResponse({"saved": len(valid), "config": valid})
+
+
 @app.get("/api/runs")
 async def api_list_runs(request: Request, limit: int = 20):
-    """List recent runs."""
     rows = []
     try:
+        from sqlalchemy import func as sqlfunc
         with get_db() as db:
             runs = db.query(Run).order_by(Run.started_at.desc()).limit(limit).all()
             for r in runs:
+                cnt = db.query(sqlfunc.count(Finding.id)).filter(
+                    Finding.run_id == r.id
+                ).scalar() or 0
                 rows.append(
                     {
                         "id": r.id,
@@ -280,12 +325,12 @@ async def api_list_runs(request: Request, limit: int = 20):
                         "started_at": r.started_at.isoformat() if r.started_at else None,
                         "score_overall": r.score_overall,
                         "source_url": r.source_url,
+                        "findings_count": cnt,
                     }
                 )
     except Exception:
         pass
 
-    # Also include live scans not yet in DB
     for s in _active_scans.values():
         if not any(r["id"] == s.run_id for r in rows):
             rows.insert(
@@ -297,6 +342,7 @@ async def api_list_runs(request: Request, limit: int = 20):
                     "started_at": s.started_at,
                     "score_overall": None,
                     "source_url": s.repo_url,
+                    "findings_count": s.findings_count,
                 },
             )
     return JSONResponse(rows)
@@ -304,7 +350,6 @@ async def api_list_runs(request: Request, limit: int = 20):
 
 @app.get("/api/runs/{run_id}")
 async def api_get_run(run_id: str, request: Request):
-    """Get live or persisted run state."""
     state = _active_scans.get(run_id)
     if state:
         return JSONResponse(state.to_dict())
@@ -342,7 +387,6 @@ async def api_get_findings(
     severity: Optional[str] = None,
     agent: Optional[str] = None,
 ):
-    """Get findings for a run with optional filters."""
     try:
         with get_db() as db:
             q = db.query(Finding).filter(Finding.run_id == run_id)
@@ -374,7 +418,10 @@ async def api_stream_run(run_id: str, request: Request):
     """Server-Sent Events endpoint for live scan progress."""
     state = _active_scans.get(run_id)
     if not state:
-        raise HTTPException(status_code=404, detail="Active scan not found. It may have completed — check /api/runs/{run_id}")
+        raise HTTPException(
+            status_code=404,
+            detail="Active scan not found. It may have completed — check /api/runs/{run_id}",
+        )
 
     q = state.subscribe()
 
@@ -389,7 +436,6 @@ async def api_stream_run(run_id: str, request: Request):
                     if event.get("type") in ("run_complete", "scan_failed"):
                         break
                 except asyncio.TimeoutError:
-                    # Heartbeat keeps the connection alive through proxies
                     yield 'data: {"type":"heartbeat"}\n\n'
         finally:
             state.unsubscribe(q)
@@ -407,4 +453,4 @@ async def api_stream_run(run_id: str, request: Request):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "0.1.0"}
+    return {"status": "ok", "version": "0.3.0"}

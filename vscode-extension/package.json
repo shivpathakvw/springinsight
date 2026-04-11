@@ -1,0 +1,147 @@
+{
+  "name": "springinsight",
+  "displayName": "SpringInsight",
+  "description": "Autonomous multi-agent codebase intelligence for Java / Spring Boot",
+  "version": "0.3.0",
+  "publisher": "springinsight",
+  "icon": "images/icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Other",
+    "Testing"
+  ],
+  "keywords": [
+    "java",
+    "spring",
+    "spring-boot",
+    "security",
+    "code-review",
+    "CVE",
+    "code-quality"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shivpathakvw/springinsight"
+  },
+  "activationEvents": [
+    "onLanguage:java",
+    "workspaceContains:**/pom.xml",
+    "workspaceContains:**/build.gradle"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "springinsight.scanProject",
+        "title": "SpringInsight: Scan Project",
+        "icon": "$(search)"
+      },
+      {
+        "command": "springinsight.scanPhase1",
+        "title": "SpringInsight: Quick Scan (Phase 1 — Haiku, ~$0.05)"
+      },
+      {
+        "command": "springinsight.openDashboard",
+        "title": "SpringInsight: Open Web Dashboard"
+      },
+      {
+        "command": "springinsight.showFindings",
+        "title": "SpringInsight: Show Findings"
+      },
+      {
+        "command": "springinsight.configureAgents",
+        "title": "SpringInsight: Configure Agents"
+      },
+      {
+        "command": "springinsight.clearDiagnostics",
+        "title": "SpringInsight: Clear Diagnostics"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "when": "explorerResourceIsFolder",
+          "command": "springinsight.scanProject",
+          "group": "springinsight"
+        }
+      ],
+      "editor/title": [
+        {
+          "when": "resourceLangId == java",
+          "command": "springinsight.scanProject",
+          "group": "navigation"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "springinsight",
+          "title": "SpringInsight",
+          "icon": "$(shield)"
+        }
+      ]
+    },
+    "views": {
+      "springinsight": [
+        {
+          "id": "springinsight.findings",
+          "name": "Findings",
+          "icon": "$(warning)"
+        },
+        {
+          "id": "springinsight.runs",
+          "name": "Scan History",
+          "icon": "$(history)"
+        },
+        {
+          "id": "springinsight.agents",
+          "name": "Agents",
+          "icon": "$(robot)"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "SpringInsight",
+      "properties": {
+        "springinsight.webUiUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8080",
+          "description": "URL of the SpringInsight Web UI (start with: springinsight web)"
+        },
+        "springinsight.autoStartWebUi": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically start the Web UI when SpringInsight activates"
+        },
+        "springinsight.defaultAgents": {
+          "type": "string",
+          "default": "all",
+          "description": "Default agents to run (e.g. 'A03,A10,A12' for quick scan, or 'all')"
+        },
+        "springinsight.showInlineDecorations": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show severity icons inline in the editor gutter"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "20.x",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.56.0"
+  }
+}

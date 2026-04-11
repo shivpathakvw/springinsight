@@ -77,25 +77,29 @@ def _build_progress_table(agent_states: dict[str, dict]) -> Table:
 
 
 @click.command("run")
+@click.argument("target", required=False, default=None, metavar="[PATH_OR_URL]")
 @click.option("--work-dir", "-w", default=".", help="SpringInsight working directory (contains context.yaml)")
-@click.option("--project", "-p", default=None, help="Override project path or GitHub URL")
+@click.option("--project", "-p", default=None, help="Project path or GitHub URL (same as positional argument)")
 @click.option("--agents", "-a", default="all", help="Comma-separated agent IDs to run, or 'all'")
 @click.option("--phase", default=None, type=int, help="Run only agents from a specific phase (1-4)")
 @click.option("--parallel", default=None, type=int, help="Max concurrent agents (overrides context.yaml)")
 @click.option("--no-db", is_flag=True, help="Skip saving findings to SQLite (print only)")
-def run_cmd(work_dir: str, project: str | None, agents: str, phase: int | None, parallel: int | None, no_db: bool):
+def run_cmd(target: str | None, work_dir: str, project: str | None, agents: str, phase: int | None, parallel: int | None, no_db: bool):
     """Run SpringInsight agents against a Spring Boot project.
 
-    Pass a local path or GitHub URL via --project.
+    TARGET can be a local path or a GitHub URL (positional or --project flag).
     If omitted, uses the base_path from context.yaml.
 
     Examples:\n
       springinsight run\n
-      springinsight run --project /path/to/service\n
-      springinsight run --project https://github.com/org/repo\n
-      springinsight run --agents A03,A10\n
-      springinsight run --phase 1
+      springinsight run /path/to/service\n
+      springinsight run https://github.com/org/repo\n
+      springinsight run https://github.com/org/repo --agents A03,A10,A12\n
+      springinsight run --phase 1\n
+      springinsight run --project https://github.com/org/repo
     """
+    # Positional argument takes precedence over --project flag
+    project = target or project
     work_path = Path(work_dir).expanduser().resolve()
 
     # ── Load context ────────────────────────────────────────────────────────
@@ -383,7 +387,7 @@ def _print_summary(run_id, results, findings, scores, run_dir):
         f"[green]✓ Run complete![/green] [bold]{run_id}[/bold]\n\n"
         f"  Report: [bold]{run_dir / 'MASTER-REPORT.md'}[/bold]\n"
         f"  View:   [bold yellow]springinsight report[/bold yellow]\n"
-        f"  UI:     [bold yellow]springinsight ui[/bold yellow]",
+        f"  UI:     [bold yellow]springinsight web[/bold yellow]",
         border_style="green"
     ))
     console.print()

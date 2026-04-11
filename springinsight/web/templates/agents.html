@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block title %}Agent Configuration — SpringInsight{% endblock %}
+{% block nav_agents %}active{% endblock %}
+
+{% block content %}
+<div style="padding:36px 40px; max-width:860px;" x-data="agentConfig()" x-init="init()">
+
+  <!-- Header -->
+  <div style="margin-bottom:28px;">
+    <h1 style="font-size:22px; font-weight:700; color:var(--text); margin:0 0 6px;">Agent Configuration</h1>
+    <p style="color:var(--muted); margin:0; font-size:13px;">
+      Enable or disable individual agents. Only enabled agents run during a scan.
+      Disabling expensive Opus agents can significantly reduce cost.
+    </p>
+  </div>
+
+  <!-- Cost warning -->
+  <div class="card" style="padding:14px 18px; margin-bottom:24px; border-color:rgba(234,179,8,.25); background:rgba(234,179,8,.05); display:flex; align-items:flex-start; gap:12px;">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#eab308" stroke-width="2" style="flex-shrink:0; margin-top:2px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <div>
+      <div style="font-size:13px; font-weight:600; color:var(--yellow); margin-bottom:3px;">Cost Guidance</div>
+      <div style="font-size:12px; color:var(--muted);">
+        Running all 15 agents on a large project can cost <strong style="color:var(--text);">$3–8</strong>.
+        For quick checks, enable only Phase 1 agents (Haiku, ~$0.05 total).
+        Opus agents (A05 Architecture, A08 LLD) are the most expensive at ~$1–2 each.
+      </div>
+    </div>
+  </div>
+
+  <!-- Save status -->
+  <div x-show="saved" x-cloak style="margin-bottom:16px; padding:10px 16px; background:rgba(34,197,94,.08); border:1px solid rgba(34,197,94,.2); border-radius:6px; color:var(--green); font-size:13px; display:flex; align-items:center; gap:8px;">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+    Configuration saved — only enabled agents will run in future scans.
+  </div>
+
+  <!-- Phase groups -->
+  {% set phases = {} %}
+  {% for agent in agents %}
+    {% set _ = phases.update({agent.phase: phases.get(agent.phase, []) + [agent]}) %}
+  {% endfor %}
+
+  {% for phase_num in [1, 2, 3, 4] %}
+  {% set phase_agents = agents | selectattr('phase', 'eq', phase_num) | list %}
+  {% if phase_agents %}
+  <div style="margin-bottom:24px;">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+      <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted);">
+        Phase {{ phase_num }}
+        {% if phase_num == 1 %}— Fast Haiku Scans{% elif phase_num == 2 %}— Deep Sonnet Analysis{% elif phase_num == 3 %}— Opus Architecture{% elif phase_num == 4 %}— Generator Agents{% endif %}
+      </div>
+      <div style="flex:1; height:1px; background:var(--border);"></div>
+      <button
+        @click="togglePhase({{ phase_num }})"
+        style="font-size:11px; color:var(--muted); background:none; border:none; cursor:pointer; padding:2px 6px; border-radius:4px;"
+        :style="phaseAllEnabled({{ phase_num }}) ? 'color:var(--red)' : 'color:var(--green)'"
+        x-text="phaseAllEnabled({{ phase_num }}) ? 'Disable all' : 'Enable all'">
+      </button>
+    </div>
+
+    <div class="card" style="overflow:hidden;">
+      {% for agent in phase_agents %}
+      <div style="display:flex; align-items:center; padding:14px 18px; border-bottom:1px solid var(--border);"
+           x-bind:style="config['{{ agent.id }}'] === false ? 'opacity:0.5' : ''">
+
+        <!-- Toggle -->
+        <div style="margin-right:16px; flex-shrink:0;">
+          <label style="position:relative; display:inline-block; width:36px; height:20px; cursor:pointer;">
+            <input type="checkbox"
+                   style="opacity:0; width:0; height:0; position:absolute;"
+                   :checked="config['{{ agent.id }}'] !== false"
+                   @change="toggle('{{ agent.id }}', $event.target.checked)">
+            <span style="position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; border-radius:20px; transition:.2s;"
+                  :style="config['{{ agent.id }}'] !== false
+                    ? 'background:var(--orange)'
+                    : 'background:var(--border-hi)'">
+              <span style="position:absolute; height:14px; width:14px; left:3px; bottom:3px; background:white; border-radius:50%; transition:.2s;"
+                    :style="config['{{ agent.id }}'] !== false ? 'transform:translateX(16px)' : ''"></span>
+            </span>
+          </label>
+        </div>
+
+        <!-- Agent info -->
+        <div style="flex:1; min-width:0;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:3px;">
+            <span style="font-size:13px; font-weight:600; color:var(--text);">{{ agent.name }}</span>
+            <span style="font-size:10px; font-family:monospace; color:var(--muted); background:var(--surface); padding:1px 5px; border-radius:3px;">{{ agent.id }}</span>
+            <span class="badge
+              {% if 'haiku' in agent.model %}badge-green
+              {% elif 'sonnet' in agent.model %}badge-blue
+              {% else %}badge-purple{% endif %}"
+              style="font-size:10px;">
+              {% if 'haiku' in agent.model %}Haiku
+              {% elif 'sonnet' in agent.model %}Sonnet
+              {% else %}Opus{% endif %}
+            </span>
+          </div>
+          <div style="font-size:12px; color:var(--muted);">{{ agent.description or 'Static analysis agent' }}</div>
+        </div>
+
+        <!-- Cost label -->
+        <div style="text-align:right; flex-shrink:0; margin-left:16px;">
+          <div style="font-size:11px; color:var(--muted);">{{ agent.cost_label }}</div>
+          <div style="font-size:10px; color:var(--border-hi); margin-top:2px;">per scan</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+
+  <!-- Save button -->
+  <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:8px;">
+    <button @click="reset()" style="background:none; border:1px solid var(--border); color:var(--muted); border-radius:7px; padding:9px 18px; font-size:13px; cursor:pointer;">
+      Reset to defaults
+    </button>
+    <button class="btn-primary" @click="save()" :disabled="saving">
+      <span x-text="saving ? 'Saving…' : 'Save Configuration'"></span>
+    </button>
+  </div>
+
+</div>
+
+<style>[x-cloak] { display:none !important; }</style>
+
+<script>
+const INITIAL_CONFIG = {{ config_json | tojson }};
+const PHASE_AGENTS = {
+  {% for phase_num in [1, 2, 3, 4] %}
+  {{ phase_num }}: [{% for a in agents if a.phase == phase_num %}'{{ a.id }}'{% if not loop.last %},{% endif %}{% endfor %}],
+  {% endfor %}
+};
+
+function agentConfig() {
+  return {
+    config: { ...INITIAL_CONFIG },
+    saved: false,
+    saving: false,
+
+    init() {
+      // Ensure all agents have a default entry
+      const allIds = Object.values(PHASE_AGENTS).flat();
+      allIds.forEach(id => {
+        if (this.config[id] === undefined) this.config[id] = true;
+      });
+    },
+
+    toggle(agentId, enabled) {
+      this.config[agentId] = enabled;
+      this.saved = false;
+    },
+
+    togglePhase(phase) {
+      const ids = PHASE_AGENTS[phase] || [];
+      const allEnabled = ids.every(id => this.config[id] !== false);
+      ids.forEach(id => { this.config[id] = !allEnabled; });
+      this.saved = false;
+    },
+
+    phaseAllEnabled(phase) {
+      const ids = PHASE_AGENTS[phase] || [];
+      return ids.every(id => this.config[id] !== false);
+    },
+
+    async save() {
+      this.saving = true;
+      try {
+        const res = await fetch('/api/settings/agents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(this.config),
+        });
+        if (res.ok) {
+          this.saved = true;
+          setTimeout(() => this.saved = false, 4000);
+        }
+      } finally {
+        this.saving = false;
+      }
+    },
+
+    reset() {
+      const allIds = Object.values(PHASE_AGENTS).flat();
+      allIds.forEach(id => { this.config[id] = true; });
+      this.saved = false;
+    },
+  };
+}
+</script>
+{% endblock %}

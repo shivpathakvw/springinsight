@@ -3,59 +3,83 @@
 from __future__ import annotations
 
 
+# Deduction per finding severity within a dimension
+SEVERITY_DEDUCTION = {"CRITICAL": 25, "HIGH": 10, "MEDIUM": 4, "LOW": 1, "INFO": 0}
+
+# Category → dimension mapping
+CATEGORY_TO_DIM: dict[str, str] = {
+    # Security
+    "Security": "security",
+    "CVE": "security",
+    "Crypto": "security",
+    "Authentication": "security",
+    "Authorization": "security",
+    # Code Quality
+    "Code Quality": "code_quality",
+    "Dead Code": "code_quality",
+    "Concurrency": "code_quality",
+    "Performance": "code_quality",
+    # Architecture
+    "Architecture": "architecture",
+    "Layering": "architecture",
+    "SOLID": "architecture",
+    "Dependency": "architecture",
+    # API Design
+    "API Design": "api_design",
+    "REST": "api_design",
+    # Test Coverage
+    "Testing": "test_coverage",
+    "LLD": "test_coverage",
+    # Production Readiness
+    "Config": "production_readiness",
+    "Infrastructure": "production_readiness",
+    "License": "production_readiness",
+    "Database": "production_readiness",
+}
+
+# Weight of each dimension in the overall score (must sum to 1.0)
+DIMENSION_WEIGHTS: dict[str, float] = {
+    "security":             0.30,
+    "code_quality":         0.20,
+    "architecture":         0.15,
+    "api_design":           0.15,
+    "production_readiness": 0.12,
+    "test_coverage":        0.08,
+}
+
+
 def calculate_scores(findings: list[dict]) -> dict[str, int]:
-    """Compute scores (0-100) from a list of finding dicts.
+    """Compute scores (0–100) per dimension from a list of findings.
 
-    Higher score = better. Starts at 100, deducts per finding by severity.
-    Weights are different per score dimension.
+    Each dimension starts at 100 and loses points per finding in its category.
+    Overall = weighted average of all dimensions.
+    Higher = better.
     """
+    DIMENSIONS = list(DIMENSION_WEIGHTS.keys())
+
     if not findings:
-        return {
-            "overall": 100, "security": 100, "code_quality": 100,
-            "architecture": 100, "api_design": 100,
-            "test_coverage": 100, "production_readiness": 100,
-        }
+        return {"overall": 100, **{d: 100 for d in DIMENSIONS}}
 
-    # Deduction weights per severity
-    SEVERITY_WEIGHT = {"CRITICAL": 20, "HIGH": 8, "MEDIUM": 3, "LOW": 1, "INFO": 0}
-
-    # Category → score dimension mapping
-    CAT_TO_DIM = {
-        "Security": "security",
-        "CVE": "security",
-        "Crypto": "security",
-        "Authentication": "security",
-        "Code Quality": "code_quality",
-        "Dead Code": "code_quality",
-        "Architecture": "architecture",
-        "Layering": "architecture",
-        "SOLID": "architecture",
-        "API Design": "api_design",
-        "REST": "api_design",
-        "Testing": "test_coverage",
-        "Config": "production_readiness",
-        "Infrastructure": "production_readiness",
-        "License": "production_readiness",
-    }
-
-    deductions: dict[str, int] = {
-        "overall": 0, "security": 0, "code_quality": 0,
-        "architecture": 0, "api_design": 0,
-        "test_coverage": 0, "production_readiness": 0,
-    }
+    # Accumulate deductions per dimension
+    deductions: dict[str, int] = {d: 0 for d in DIMENSIONS}
 
     for finding in findings:
         severity = finding.get("severity", "LOW").upper()
         category = finding.get("category", "")
-        weight = SEVERITY_WEIGHT.get(severity, 0)
+        points = SEVERITY_DEDUCTION.get(severity, 0)
 
-        deductions["overall"] += weight
+        dim = CATEGORY_TO_DIM.get(category)
+        if dim and dim in deductions:
+            deductions[dim] += points
+        else:
+            # Uncategorised findings lightly penalise all dimensions
+            for d in DIMENSIONS:
+                deductions[d] += max(1, points // len(DIMENSIONS))
 
-        dim = CAT_TO_DIM.get(category)
-        if dim:
-            deductions[dim] += weight * 2  # heavier deduction in the specific dimension
+    # Clamp each dimension to [0, 100]
+    dim_scores = {d: max(0, min(100, 100 - deductions[d])) for d in DIMENSIONS}
 
-    return {
-        key: max(0, min(100, 100 - deductions[key]))
-        for key in deductions
-    }
+    # Overall = weighted average
+    overall = round(sum(dim_scores[d] * DIMENSION_WEIGHTS[d] for d in DIMENSIONS))
+
+    return {"overall": overall, **dim_scores}

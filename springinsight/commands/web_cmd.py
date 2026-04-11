@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -17,16 +18,18 @@ import click
     "--data-dir",
     default=None,
     type=click.Path(),
-    help="Directory for scans, repos, and DB (default: ~/.springinsight/web)",
+    help="Directory for scans, repos, and DB (default: ~/.springinsight)",
 )
 @click.option("--open", "open_browser", is_flag=True, default=False, help="Open browser after start")
-def web_cmd(host: str, port: int, reload: bool, data_dir: str | None, open_browser: bool):
+@click.option("--verbose", "-v", is_flag=True, default=False, help="Show agent progress and scan logs in the terminal")
+def web_cmd(host: str, port: int, reload: bool, data_dir: str | None, open_browser: bool, verbose: bool):
     """Start the SpringInsight Web UI.
 
     \b
     Examples:
       springinsight web
       springinsight web --port 9000 --open
+      springinsight web --verbose          # show live agent progress in terminal
       springinsight web --data-dir /tmp/si-data --reload
     """
     try:
@@ -42,11 +45,26 @@ def web_cmd(host: str, port: int, reload: bool, data_dir: str | None, open_brows
     if data_dir:
         os.environ["SPRINGINSIGHT_DATA_DIR"] = str(Path(data_dir).expanduser().resolve())
 
+    # Configure logging level based on --verbose
+    log_level_str = "info" if verbose else "warning"
+    if verbose:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s  %(levelname)-7s  %(name)s  %(message)s",
+            datefmt="%H:%M:%S",
+        )
+        # Show agent runner logs in the terminal
+        logging.getLogger("springinsight.agents.runner").setLevel(logging.INFO)
+        logging.getLogger("springinsight.web.scanner").setLevel(logging.INFO)
+    else:
+        logging.basicConfig(level=logging.WARNING)
+
     url = f"http://{host}:{port}"
     click.echo(
         click.style("⚡ SpringInsight Web UI", fg="bright_yellow", bold=True)
         + f"\n  URL:      {click.style(url, fg='cyan', underline=True)}"
-        + f"\n  Data dir: {os.environ.get('SPRINGINSIGHT_DATA_DIR', '~/.springinsight/web')}"
+        + f"\n  Data dir: {os.environ.get('SPRINGINSIGHT_DATA_DIR', '~/.springinsight')}"
+        + ("\n  Mode:     verbose  (agent logs → terminal)" if verbose else "")
         + ("\n  Mode:     development (auto-reload)" if reload else "")
         + "\n"
         + click.style("  Press Ctrl+C to stop.\n", dim=True)
@@ -62,5 +80,5 @@ def web_cmd(host: str, port: int, reload: bool, data_dir: str | None, open_brows
         host=host,
         port=port,
         reload=reload,
-        log_level="warning",
+        log_level=log_level_str,
     )

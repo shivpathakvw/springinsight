@@ -76,6 +76,15 @@ Do NOT skip any steps. Write your complete findings to the paths specified above
     return f"{skill_content}\n\n{context_block}\n\n{scope_block}"
 
 
+def _count_java_files(project_path: str) -> int:
+    """Count .java source files in a project directory."""
+    try:
+        p = Path(project_path)
+        return sum(1 for _ in p.rglob("*.java") if ".git" not in str(_))
+    except Exception:
+        return 0
+
+
 async def run_agent_async(
     agent: AgentMeta,
     ctx: ProjectContext,
@@ -84,6 +93,7 @@ async def run_agent_async(
     run_id: str,
     extra_scope: str = "",
     timeout: int = AGENT_TIMEOUT,
+    log_callback=None,   # log_callback(agent_id, message: str)
 ) -> dict:
     """Run a single agent asynchronously. Returns execution metadata."""
     raw_dir = run_dir / "raw"
@@ -106,6 +116,11 @@ async def run_agent_async(
 
     started_at = datetime.utcnow()
 
+    def _log(msg: str) -> None:
+        logger.info("[%s] %s", agent.id, msg)
+        if log_callback:
+            log_callback(agent.id, msg)
+
     if not _check_claude_cli():
         return {
             "agent_id": agent.id,
@@ -116,7 +131,11 @@ async def run_agent_async(
             "output_json": None,
             "output_md": None,
             "findings": [],
+            "java_files": 0,
         }
+
+    java_files = _count_java_files(project_path)
+    _log(f"Found {java_files} Java source files to analyze")
 
     try:
         process = await asyncio.create_subprocess_exec(
@@ -130,13 +149,28 @@ async def run_agent_async(
             cwd=project_path,
         )
 
+        # Heartbeat task — emits progress every 15s while the agent is running
+        heartbeat_interval = 15
+        _heartbeat_count = [0]
+
+        async def _heartbeat():
+            while True:
+                await asyncio.sleep(heartbeat_interval)
+                _heartbeat_count[0] += 1
+                elapsed = _heartbeat_count[0] * heartbeat_interval
+                _log(f"Still analyzing… ({elapsed}s elapsed)")
+
+        heartbeat_task = asyncio.create_task(_heartbeat())
+
         try:
             stdout, stderr = await asyncio.wait_for(
                 process.communicate(), timeout=timeout
             )
-        except TimeoutError:
+        except (TimeoutError, asyncio.TimeoutError):
+            heartbeat_task.cancel()
             process.kill()
             await process.communicate()
+            _log(f"Timed out after {timeout}s")
             return {
                 "agent_id": agent.id,
                 "status": "failed",
@@ -146,13 +180,22 @@ async def run_agent_async(
                 "output_json": None,
                 "output_md": None,
                 "findings": [],
+                "java_files": java_files,
             }
+        finally:
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
 
         completed_at = datetime.utcnow()
+        duration = (completed_at - started_at).total_seconds()
 
         if process.returncode != 0:
             error_msg = stderr.decode(errors="replace").strip()
             logger.warning("Agent %s failed (rc=%d): %s", agent.id, process.returncode, error_msg[:200])
+            _log(f"Failed after {duration:.0f}s — exit code {process.returncode}")
             return {
                 "agent_id": agent.id,
                 "status": "failed",
@@ -162,6 +205,7 @@ async def run_agent_async(
                 "output_json": None,
                 "output_md": None,
                 "findings": [],
+                "java_files": java_files,
             }
 
         # Try to load the JSON findings the agent wrote.
@@ -177,6 +221,15 @@ async def run_agent_async(
             except json.JSONDecodeError as e:
                 logger.warning("Agent %s wrote invalid JSON: %s", agent.id, e)
 
+        # Severity breakdown for the log
+        crit = sum(1 for f in findings if f.get("severity") == "CRITICAL")
+        high = sum(1 for f in findings if f.get("severity") == "HIGH")
+        med  = sum(1 for f in findings if f.get("severity") == "MEDIUM")
+        _log(
+            f"Complete in {duration:.0f}s — {len(findings)} finding(s)"
+            + (f" [{crit} CRITICAL, {high} HIGH, {med} MEDIUM]" if findings else "")
+        )
+
         return {
             "agent_id": agent.id,
             "status": "complete",
@@ -186,11 +239,13 @@ async def run_agent_async(
             "output_json": str(output_json) if output_json.exists() else None,
             "output_md": str(output_md) if output_md.exists() else None,
             "findings": findings,
+            "java_files": java_files,
             "stdout_preview": stdout.decode(errors="replace")[:500],
         }
 
     except Exception as exc:
         logger.exception("Unexpected error running agent %s", agent.id)
+        _log(f"Unexpected error: {exc}")
         return {
             "agent_id": agent.id,
             "status": "failed",
@@ -200,6 +255,7 @@ async def run_agent_async(
             "output_json": None,
             "output_md": None,
             "findings": [],
+            "java_files": java_files if "java_files" in dir() else 0,
         }
 
 
@@ -211,19 +267,23 @@ async def run_agents_parallel(
     run_id: str,
     parallelism: int = 6,
     progress_callback=None,
+    log_callback=None,
 ) -> list[dict]:
     """Run multiple agents with bounded parallelism.
 
     progress_callback(agent_id, status) is called on start + completion.
+    log_callback(agent_id, message)    is called for verbose log lines.
     """
     semaphore = asyncio.Semaphore(parallelism)
-    results = []
 
     async def _run_with_sem(agent: AgentMeta) -> dict:
         async with semaphore:
             if progress_callback:
                 progress_callback(agent.id, "running")
-            result = await run_agent_async(agent, ctx, project_path, run_dir, run_id)
+            result = await run_agent_async(
+                agent, ctx, project_path, run_dir, run_id,
+                log_callback=log_callback,
+            )
             if progress_callback:
                 progress_callback(agent.id, result["status"])
             return result

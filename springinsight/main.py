@@ -7,6 +7,7 @@ from rich.console import Console
 
 from . import __version__
 from .commands import init_cmd, report_cmd, run_cmd, web_cmd
+from .commands.mcp_cmd import mcp_cmd
 from .utils.env import load_env as _load_env
 
 # Load .env from CWD / home directory on startup so ANTHROPIC_API_KEY is
@@ -50,6 +51,7 @@ cli.add_command(init_cmd, name="init")
 cli.add_command(run_cmd, name="run")
 cli.add_command(report_cmd, name="report")
 cli.add_command(web_cmd, name="web")
+cli.add_command(mcp_cmd, name="mcp")
 
 
 # ── findings subcommand ─────────────────────────────────────────────────────

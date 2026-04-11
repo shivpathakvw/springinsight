@@ -2,6 +2,7 @@
 
 Each scan is represented by a ``ScanState`` object that holds:
   - Live agent status dict (pending/running/complete/failed)
+  - Per-agent log messages and file stats
   - An event log for replay by late SSE subscribers
   - A list of asyncio Queues (one per connected browser tab)
 
@@ -29,6 +30,9 @@ logger = logging.getLogger(__name__)
 # Keyed by run_id (8-char hex string).
 _active_scans: dict[str, "ScanState"] = {}
 
+# Max log lines kept per agent in memory
+MAX_AGENT_LOGS = 200
+
 
 @dataclass
 class ScanState:
@@ -39,9 +43,15 @@ class ScanState:
     project_name: str = ""
     status: str = "pending"                          # pending | running | complete | failed
     agents: dict[str, str] = field(default_factory=dict)    # agent_id -> status
-    agent_names: dict[str, str] = field(default_factory=dict)   # agent_id -> human name
-    agent_models: dict[str, str] = field(default_factory=dict)  # agent_id -> model
+    agent_names: dict[str, str] = field(default_factory=dict)
+    agent_models: dict[str, str] = field(default_factory=dict)
+    agent_findings: dict[str, int] = field(default_factory=dict)  # agent_id -> count
+    agent_java_files: dict[str, int] = field(default_factory=dict)  # agent_id -> file count
+    agent_start_times: dict[str, str] = field(default_factory=dict)  # agent_id -> ISO timestamp
+    agent_end_times: dict[str, str] = field(default_factory=dict)
+    agent_logs: dict[str, list] = field(default_factory=dict)    # agent_id -> [log lines]
     findings_count: int = 0
+    total_java_files: int = 0
     scores: dict = field(default_factory=dict)
     started_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     completed_at: Optional[str] = None
@@ -65,7 +75,7 @@ class ScanState:
 
     def subscribe(self) -> asyncio.Queue:
         """Create a subscriber queue pre-filled with the event history."""
-        q: asyncio.Queue = asyncio.Queue(maxsize=1000)
+        q: asyncio.Queue = asyncio.Queue(maxsize=2000)
         for evt in self._event_log:
             try:
                 q.put_nowait(evt)
@@ -80,6 +90,15 @@ class ScanState:
         except ValueError:
             pass
 
+    def add_agent_log(self, agent_id: str, message: str) -> None:
+        """Append a log line to per-agent history (bounded)."""
+        if agent_id not in self.agent_logs:
+            self.agent_logs[agent_id] = []
+        logs = self.agent_logs[agent_id]
+        logs.append(message)
+        if len(logs) > MAX_AGENT_LOGS:
+            logs.pop(0)
+
     # ── Serialisation ──────────────────────────────────────────────────────────
 
     def to_dict(self) -> dict:
@@ -91,7 +110,13 @@ class ScanState:
             "agents": self.agents,
             "agent_names": self.agent_names,
             "agent_models": self.agent_models,
+            "agent_findings": self.agent_findings,
+            "agent_java_files": self.agent_java_files,
+            "agent_start_times": self.agent_start_times,
+            "agent_end_times": self.agent_end_times,
+            "agent_logs": self.agent_logs,
             "findings_count": self.findings_count,
+            "total_java_files": self.total_java_files,
             "scores": self.scores,
             "started_at": self.started_at,
             "completed_at": self.completed_at,
@@ -108,16 +133,22 @@ async def run_scan_background(
     work_dir: Path,
     agents: list[AgentMeta],
 ) -> None:
-    """Coroutine launched as a background asyncio task.
-
-    Drives the full scan lifecycle, updating *state* and broadcasting SSE
-    events at each stage.
-    """
+    """Coroutine launched as a background asyncio task."""
     state.status = "running"
+
+    # Count total Java files once
+    try:
+        state.total_java_files = sum(
+            1 for _ in project_path.rglob("*.java") if ".git" not in str(_)
+        )
+    except Exception:
+        pass
+
     state.push_event(
         {
             "type": "scan_started",
             "agent_count": len(agents),
+            "total_java_files": state.total_java_files,
             "agents": [
                 {"id": a.id, "name": a.name, "model": a.model, "phase": a.phase}
                 for a in agents
@@ -128,6 +159,12 @@ async def run_scan_background(
     def _on_progress(agent_id: str, status: str) -> None:
         """Called by run_agents_parallel when an agent's status changes."""
         state.agents[agent_id] = status
+        now = datetime.utcnow().isoformat()
+        if status == "running":
+            state.agent_start_times[agent_id] = now
+        elif status in ("complete", "failed"):
+            state.agent_end_times[agent_id] = now
+
         agent_meta = AGENT_REGISTRY.get(agent_id)
         state.push_event(
             {
@@ -135,6 +172,19 @@ async def run_scan_background(
                 "agent_id": agent_id,
                 "agent_name": agent_meta.name if agent_meta else agent_id,
                 "status": status,
+                "java_files": state.agent_java_files.get(agent_id, 0),
+                "started_at": state.agent_start_times.get(agent_id),
+            }
+        )
+
+    def _on_log(agent_id: str, message: str) -> None:
+        """Called by the runner for each verbose log line from an agent."""
+        state.add_agent_log(agent_id, message)
+        state.push_event(
+            {
+                "type": "agent_log",
+                "agent_id": agent_id,
+                "message": message,
             }
         )
 
@@ -150,6 +200,7 @@ async def run_scan_background(
             run_id=state.run_id,
             parallelism=3,
             progress_callback=_on_progress,
+            log_callback=_on_log,
         )
     except Exception as exc:
         logger.exception("Scan %s crashed: %s", state.run_id, exc)
@@ -157,7 +208,6 @@ async def run_scan_background(
         state.error = str(exc)
         state.completed_at = datetime.utcnow().isoformat()
         state.push_event({"type": "scan_failed", "error": str(exc)})
-        # Persist failure to DB
         _persist_to_db(state, work_dir, [], [])
         return
 
@@ -167,14 +217,20 @@ async def run_scan_background(
     for result in results:
         agent_id = result["agent_id"]
         agent_results_map[agent_id] = result
-        all_findings.extend(result.get("findings", []))
+        findings = result.get("findings", [])
+        all_findings.extend(findings)
+
+        # Update per-agent file stats
+        state.agent_java_files[agent_id] = result.get("java_files", 0)
+        state.agent_findings[agent_id] = len(findings)
+
         # Emit findings-discovered event for each agent
-        if result.get("findings"):
+        if findings:
             state.push_event(
                 {
                     "type": "findings_update",
                     "agent_id": agent_id,
-                    "count": len(result["findings"]),
+                    "count": len(findings),
                     "total": len(all_findings),
                 }
             )
@@ -191,6 +247,7 @@ async def run_scan_background(
             "findings_count": len(all_findings),
             "scores": state.scores,
             "completed_at": state.completed_at,
+            "agent_findings": state.agent_findings,
         }
     )
 
@@ -201,7 +258,6 @@ async def run_scan_background(
         scores.get("overall", 0),
     )
 
-    # Persist to SQLite
     _persist_to_db(state, work_dir, all_findings, list(agent_results_map.values()))
 
 
@@ -215,14 +271,15 @@ def _persist_to_db(
     try:
         from ..db.database import get_db
         from ..db.models import Run, AgentRun, Finding as FindingModel
-        from datetime import timezone
 
-        def _parse_dt(iso: str | None):
-            if not iso:
+        def _parse_dt(iso_or_dt):
+            if iso_or_dt is None:
                 return None
+            if isinstance(iso_or_dt, datetime):
+                return iso_or_dt
             try:
-                return datetime.fromisoformat(iso)
-            except ValueError:
+                return datetime.fromisoformat(str(iso_or_dt))
+            except (ValueError, TypeError):
                 return None
 
         with get_db() as db:
@@ -243,26 +300,21 @@ def _persist_to_db(
 
             # Persist agent runs
             for r in agent_results:
-                dur = None
-                if r.get("started_at") and r.get("completed_at"):
-                    try:
-                        dur = (r["completed_at"] - r["started_at"]).total_seconds()
-                    except Exception:
-                        pass
                 agent_run = AgentRun(
                     run_id=state.run_id,
                     agent_id=r["agent_id"],
                     agent_name=state.agent_names.get(r["agent_id"], r["agent_id"]),
                     model=state.agent_models.get(r["agent_id"], ""),
                     status=r.get("status", "unknown"),
-                    started_at=r.get("started_at"),
-                    completed_at=r.get("completed_at"),
+                    started_at=_parse_dt(r.get("started_at")),
+                    completed_at=_parse_dt(r.get("completed_at")),
+                    files_processed=r.get("java_files", 0),
                     findings_count=len(r.get("findings", [])),
                     error_message=r.get("error"),
                 )
                 db.add(agent_run)
 
-            # Persist findings
+            # Persist findings — only use valid FindingModel columns
             for f in all_findings:
                 finding = FindingModel(
                     run_id=state.run_id,
@@ -275,12 +327,13 @@ def _persist_to_db(
                     class_name=f.get("class_name"),
                     method_name=f.get("method_name"),
                     problem=f.get("problem", ""),
-                    code_snippet=f.get("fix_code"),
+                    code_snippet=f.get("code_snippet"),
                     impact=f.get("impact"),
                     fix_description=f.get("fix"),
                     fix_code=f.get("fix_code"),
-                    artifact_id=f.get("artifact_id"),
-                    version=f.get("version"),
+                    dependency_group_id=f.get("dependency_group_id"),
+                    dependency_artifact_id=f.get("dependency_artifact_id"),
+                    dependency_version=f.get("dependency_version") or f.get("version"),
                     cve_ids=f.get("cve_ids", []),
                     cvss_score=f.get("cvss_score"),
                     actionable=f.get("actionable", True),
