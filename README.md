@@ -23,9 +23,9 @@ Modern Spring Boot projects accumulate technical debt faster than manual reviews
 - 🏗️ **Architecture** — SOLID violations, circular dependencies, layering antipatterns
 - 🗑️ **Dead Code** — Spring-aware unused class/method detection (never false-positives on `@Bean` or `@EventListener`)
 - ⚙️ **Config Review** — DDL-auto dangers, debug mode in production, Docker/CI/CD misconfigs
-- 📐 **Low-Level Design** — Auto-generate class diagrams and sequence diagrams (Mermaid)
-- 🧪 **Test Generation** — AI-generated JUnit 5 + Mockito tests for uncovered critical paths
-- 📄 **Documentation** — Feature specs, API docs, developer guides auto-generated from source
+- 📋 **Project Context** — inject custom rules into every agent ("no field injection", "all endpoints need @PreAuthorize")
+- 🔍 **GitHub PR Scanning** — auto-scan PRs and post findings as comments
+- 📄 **PDF Export** — full scan reports as professional PDFs
 
 ---
 
@@ -34,15 +34,20 @@ Modern Spring Boot projects accumulate technical debt faster than manual reviews
 ```
 springinsight/
 ├── orchestrator (CLI / Web / MCP / VS Code)
-│   ├── context.yaml          ← project descriptor (makes system generic)
-│   └── ~/.springinsight/     ← global DB, run history, cached findings
+│   ├── context.yaml               ← per-project descriptor
+│   └── ~/.springinsight/
+│       ├── springinsight.db       ← global SQLite (CLI + Web share)
+│       ├── global-context.yaml    ← global custom rules
+│       ├── agent_config.json      ← enabled/disabled agents
+│       ├── github.json            ← GitHub token + watched repos
+│       └── pr-scans.json          ← PR scan history
 │
-├── Phase 1 agents  (claude-haiku)     — fast pattern matching (~$0.05)
+├── Phase 1  (claude-haiku)    — fast pattern matching (~$0.05)
 │   ├── A03  CVE & License Scanner
 │   ├── A10  Dead Code Detector
 │   └── A12  Config & Infra Review
 │
-├── Phase 2 agents  (claude-sonnet)    — deep analysis (~$0.80)
+├── Phase 2  (claude-sonnet)   — deep analysis (~$0.80)
 │   ├── A01  Deep Code Review
 │   ├── A02  Security Scanner (OWASP Top 10)
 │   ├── A04  Database & JPA Review
@@ -50,28 +55,18 @@ springinsight/
 │   ├── A11  Performance Analyzer
 │   ├── A13  API Design Auditor
 │   ├── A14  Concurrency & Transaction Audit
-│   └── A15  Dependency Graph (import + bean wiring + Mermaid)
+│   └── A15  Dependency Graph
 │
-└── Phase 3/4 agents  (claude-opus/sonnet) — synthesis & generation (~$2+)
+└── Phase 3/4 (claude-opus/sonnet) — synthesis & generation (~$2+)
     ├── A05  Architecture Review
     ├── A06  Test Generator
     ├── A07  Feature Documentation
     └── A08  LLD Generator
 ```
 
-Each agent is a **SKILL.md** — a structured natural-language contract that drives a `claude --print` subprocess. The orchestrator injects your `context.yaml` into every prompt, making the system work on **any** Spring Boot project without hardcoding.
-
 ---
 
-## Quick Start
-
-### Prerequisites
-
-- Python 3.10+
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`npm install -g @anthropic-ai/claude-code`)
-- An [Anthropic API key](https://console.anthropic.com/)
-
-### Install
+## Installation
 
 ```bash
 # CLI only
@@ -80,16 +75,13 @@ pip install springinsight
 # CLI + Web UI
 pip install 'springinsight[web]'
 
-# CLI + Web UI + MCP Server
-pip install 'springinsight[web,mcp]'
-
-# Everything
+# CLI + Web UI + MCP Server + PDF + GitHub
 pip install 'springinsight[all]'
 
 # From source (editable)
 git clone https://github.com/shivpathakvw/springinsight
 cd springinsight
-pip install -e '.[web,mcp]'
+pip install -e '.[all]'
 ```
 
 ### Configure API Key
@@ -115,11 +107,11 @@ springinsight run /path/to/your/spring-boot-project
 # Quick scan — Phase 1 only (fast + cheap, ~$0.05)
 springinsight run ./my-app --agents A03,A10,A12
 
-# Run a specific phase
-springinsight run ./my-app --phase 2
-
 # View the report
 springinsight report
+
+# Export report as PDF (requires: pip install reportlab)
+springinsight report --pdf ./my-report.pdf
 
 # List findings with filters
 springinsight findings --severity CRITICAL,HIGH
@@ -131,10 +123,43 @@ springinsight history
 springinsight agents
 ```
 
+### Project Context (Custom Rules)
+
+Teach agents your team's standards — injected into every agent prompt as MUST-APPLY constraints:
+
+```bash
+# Add a custom rule
+springinsight context add-rule "Never use field injection (@Autowired on fields)"
+springinsight context add-rule "All public REST endpoints must have @PreAuthorize"
+springinsight context add-rule "Use constructor injection only"
+
+# List all rules
+springinsight context list-rules
+
+# Remove a rule by index
+springinsight context remove-rule 0
+
+# Set tech-stack hints
+springinsight context set java-version 21
+springinsight context set spring-boot 3.3.x
+springinsight context set database postgresql
+
+# Show full global context
+springinsight context show
+
+# Edit raw YAML
+springinsight context edit
+
+# Reset to defaults
+springinsight context reset
+```
+
+Per-project rules: `springinsight init` creates a `context.yaml` in your project directory. Rules there take precedence over global context.
+
 ### Web UI
 
 ```bash
-# Start the server (opens at http://localhost:8080)
+# Start the server (opens at http://localhost:8765)
 springinsight web --open
 
 # Show agent progress and logs in the terminal too
@@ -144,14 +169,84 @@ springinsight web --verbose
 springinsight web --port 9000
 ```
 
-Then open `http://localhost:8080`, paste a GitHub URL or local path, and click **Start Scan**.
+Then open `http://localhost:8765`, paste a GitHub URL or local path, and click **Start Scan**.
 
 **Web UI features:**
 - Live agent progress via Server-Sent Events
 - Click any agent card to expand live logs
-- **Settings → Agents** to enable/disable individual agents and control cost
-- Shared SQLite database with CLI (runs appear in both)
-- Score history across runs
+- **Settings → Agents** — enable/disable individual agents, see cost estimates
+- **Settings → Project Context** — edit custom rules and tech-stack hints from the browser
+- **Settings → GitHub PR** — connect GitHub and watch repositories for PR scanning
+- **Export PDF** button on every completed scan result page
+- Shared SQLite database with CLI
+
+### GitHub PR Integration
+
+Auto-scan every pull request and post a formatted findings summary as a PR comment:
+
+```bash
+# Step 1: Connect your GitHub token (needs 'repo' scope)
+springinsight github connect --token ghp_xxxx
+
+# Step 2: Watch repositories
+springinsight github watch myorg/my-spring-service
+springinsight github watch myorg/payments-api
+
+# Step 3: Poll manually or let springinsight web auto-poll
+springinsight github poll
+
+# Scan a specific PR immediately
+springinsight github scan-pr https://github.com/myorg/service/pull/42
+
+# List watched repos
+springinsight github repos
+
+# View PR scan history
+springinsight github history
+
+# Show connection status
+springinsight github status
+
+# Remove a repo from watchlist
+springinsight github unwatch myorg/service
+
+# Disconnect GitHub
+springinsight github disconnect
+```
+
+When `springinsight web` is running with a GitHub token configured, the PR poller runs automatically every 5 minutes (configurable in **Settings → GitHub PR**).
+
+**PR Comment format:**
+```markdown
+## ⚡ SpringInsight Analysis
+_Automated scan of 23 changed Java files in `my-spring-service`_
+
+| Severity | Count |
+|----------|-------|
+| 🔴 CRITICAL | 1 |
+| 🟠 HIGH | 3 |
+| 🟡 MEDIUM | 7 |
+
+**🔴 CRITICAL — SQL Injection Risk**
+`UserRepository.java:142` — Concatenated query string with user input
+> 💡 Use @Query with named parameters
+
+[📊 View full report →](http://localhost:8765/scans/run-id)
+```
+
+### PDF Export
+
+```bash
+# CLI
+springinsight report --pdf ./scan-report.pdf
+
+# Web UI: click "Export PDF" button on any scan result page
+
+# Via API (programmatic)
+curl http://localhost:8765/api/runs/<run-id>/export/pdf -o report.pdf
+```
+
+Requires: `pip install reportlab` (or `pip install 'springinsight[pdf]'`).
 
 ### MCP Server (Claude Code / Cursor / Cline)
 
@@ -159,7 +254,7 @@ Then open `http://localhost:8080`, paste a GitHub URL or local path, and click *
 pip install 'springinsight[mcp]'
 ```
 
-Add to your MCP config (`~/.config/claude/claude_desktop_config.json` or Cursor settings):
+Add to your MCP config:
 
 ```json
 {
@@ -172,7 +267,7 @@ Add to your MCP config (`~/.config/claude/claude_desktop_config.json` or Cursor 
 }
 ```
 
-Available MCP tools once connected:
+Available MCP tools:
 
 | Tool | Description |
 |------|-------------|
@@ -191,10 +286,10 @@ The extension is in `vscode-extension/`. To build:
 cd vscode-extension
 npm install
 npm run compile
-# Then install the .vsix via: code --install-extension springinsight-*.vsix
+# Install: code --install-extension springinsight-*.vsix
 ```
 
-Features: scan from command palette, findings in Problems panel, inline gutter icons, live agent progress in output channel.
+Features: scan from command palette, findings in Problems panel, inline gutter icons, live status bar progress.
 
 ---
 
@@ -209,7 +304,7 @@ Running all 15 agents on a large project can cost $3–8. Use these strategies:
 | Full analysis | (default) | $1–8 |
 | Disable Opus agents | Settings → Agents → disable A05, A08 | saves ~$2 |
 
-In the Web UI: **Settings → Agents** lets you toggle individual agents and see estimated cost per agent before scanning.
+In the Web UI: **Settings → Agents** shows estimated cost per agent before scanning.
 
 ---
 
@@ -235,7 +330,10 @@ patterns:
   custom_rules:
     - "All @Transactional annotations must be on the service layer only"
     - "Never use LazyCollectionOption.EXTRA"
+    - "All REST endpoints must return ResponseEntity<T>"
 ```
+
+Global rules (apply to all projects) are stored at `~/.springinsight/global-context.yaml` and managed via `springinsight context` commands.
 
 ---
 
@@ -266,14 +364,47 @@ Run `springinsight agents` to see status and enable/disable each agent.
 ## CLI Reference
 
 ```
-springinsight run      Scan a project (positional arg or --project)
-springinsight web      Start the Web UI (--verbose for terminal agent logs)
-springinsight mcp      Start the MCP server (for Claude Code / Cursor / Cline)
-springinsight report   Display latest run report with score breakdown
-springinsight findings List findings with severity/agent filters
-springinsight history  Show run history table with scores
-springinsight agents   List all 15 agents with phase and status
-springinsight init     Initialise project context (creates context.yaml)
+springinsight run        Scan a project (positional arg or --project)
+  --agents A03,A10,A12   Run only specific agents
+  --phase 1              Run only a specific phase
+
+springinsight web        Start the Web UI
+  --verbose / -v         Stream agent logs to terminal
+  --port 9000            Custom port (default 8765)
+  --open                 Open browser automatically
+
+springinsight report     Display latest run report
+  --pdf ./report.pdf     Export as PDF (requires reportlab)
+  --severity CRITICAL    Filter by severity
+  --run-id <id>          Specific run
+  --export ./report.md   Export markdown report
+
+springinsight context    Manage global project context and custom rules
+  show                   Show current global context
+  add-rule "text"        Add a custom rule for all agents
+  remove-rule <index>    Remove a rule by index
+  list-rules             List all custom rules
+  set <key> <value>      Set a tech-stack value (java-version, spring-boot, etc.)
+  edit                   Open context file in $EDITOR
+  reset                  Reset to factory defaults
+  export --format json   Export context as JSON or YAML
+
+springinsight github     GitHub PR integration
+  connect --token ghp_x  Connect with a Personal Access Token
+  watch owner/repo       Watch a repository for new PRs
+  unwatch owner/repo     Stop watching a repository
+  repos                  List watched repositories
+  scan-pr <URL>          Manually scan a specific PR URL
+  poll                   Manually trigger poll cycle
+  history                Show PR scan history
+  status                 Show connection status
+  disconnect             Remove GitHub token
+
+springinsight mcp        Start the MCP server (for Claude Code / Cursor / Cline)
+springinsight findings   List findings with severity/agent filters
+springinsight history    Show run history table with scores
+springinsight agents     List all 15 agents with phase and status
+springinsight init       Initialise project context (creates context.yaml)
 ```
 
 Full options: `springinsight <command> --help`
@@ -301,22 +432,32 @@ CRITICAL finding = −25 pts in its dimension, HIGH = −10, MEDIUM = −4, LOW 
 
 SpringInsight stores all run data in a single **global SQLite database** at `~/.springinsight/springinsight.db`. Both the CLI and Web UI share this database, so runs started from the terminal appear in the Web UI and vice versa.
 
+Other config files at `~/.springinsight/`:
+
+| File | Contents |
+|------|----------|
+| `springinsight.db` | All run history, findings, scores |
+| `global-context.yaml` | Global custom rules and tech-stack defaults |
+| `agent_config.json` | Which agents are enabled/disabled |
+| `github.json` | GitHub token, watched repos, polling settings |
+| `pr-scans.json` | History of PR scans (prevents duplicate scans) |
+
 ---
 
 ## Roadmap
 
-- [x] Phase 1: CVE scanner, dead code, config review (A03, A10, A12)
-- [x] Phase 2: Full deep analysis — security, DB/JPA, PR review, performance, API, concurrency, dependency graph
-- [x] Phase 3: Architecture review with ADR generation, full LLD with Mermaid diagrams
-- [x] Phase 4: JUnit 5 test generation, feature docs + developer guide generation
+- [x] Phase 1–4: All 15 agents
 - [x] Web UI with live SSE progress, agent enable/disable, verbose logs
 - [x] MCP Server — Claude Code / Cursor / Cline integration
 - [x] VS Code extension — scan + diagnostics + Problems panel
 - [x] Shared global database between CLI and Web UI
+- [x] Project Context — custom rules injected into every agent
+- [x] PDF export — professional scan reports
+- [x] GitHub PR auto-scanning + auto-comment
 - [x] PyPI publishing with OIDC trusted publishing
 - [x] Product website — [springinsight.vercel.app](https://springinsight.vercel.app)
-- [ ] GitHub Actions integration (`springinsight-action` marketplace)
-- [ ] PR comments (auto-comment on PRs with findings summary)
+- [ ] GitHub Actions marketplace action (`springinsight-action`)
+- [ ] Incremental scanning (skip unchanged files)
 - [ ] SaaS hosted version
 
 ---

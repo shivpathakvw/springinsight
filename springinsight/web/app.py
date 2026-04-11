@@ -24,10 +24,24 @@ from ..agents.config import (
     is_agent_enabled,
 )
 from ..context.loader import ProjectContext, load_context
+from ..context.global_context import (
+    load_global_context,
+    save_global_context,
+    load_effective_context,
+    DEFAULT_GLOBAL_CONTEXT,
+)
 from ..db.database import get_db, init_db
 from ..db.models import AgentRun, Finding, Run
 from ..utils.env import load_env
 from ..utils.github import resolve_project_path
+from ..github.config import (
+    load_github_config,
+    save_github_config,
+    add_watched_repo,
+    remove_watched_repo,
+    get_github_token,
+)
+from ..github.pr_scanner import verify_token, parse_pr_url, scan_pr as github_scan_pr, start_poller
 from .scanner import ScanState, _active_scans, run_scan_background
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -52,6 +66,14 @@ async def lifespan(application: FastAPI):
     load_env(data_dir)
     init_db(data_dir)
     application.state.data_dir = data_dir
+
+    # Start GitHub PR poller in background if token is configured
+    token = get_github_token()
+    if token:
+        import logging
+        logging.getLogger(__name__).info("GitHub token found — starting PR poller")
+        asyncio.create_task(start_poller(data_dir, web_ui_url="http://localhost:8765"))
+
     yield
 
 
@@ -453,4 +475,258 @@ async def api_stream_run(run_id: str, request: Request):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "0.3.0"}
+    return {"status": "ok", "version": "0.4.0"}
+
+
+# ── Settings: Project Context ─────────────────────────────────────────────────
+
+@app.get("/settings/context", response_class=HTMLResponse)
+async def settings_context(request: Request):
+    """Global project context configuration page."""
+    ctx = load_global_context()
+    return templates.TemplateResponse(
+        request, "context.html", {"context_json": ctx}
+    )
+
+
+@app.post("/api/settings/context")
+async def api_save_context(request: Request):
+    """Save global project context. Body: full context dict."""
+    body = await request.json()
+    save_global_context(body)
+    return JSONResponse({"saved": True})
+
+
+@app.post("/api/settings/context/reset")
+async def api_reset_context(request: Request):
+    """Reset global context to defaults."""
+    save_global_context(DEFAULT_GLOBAL_CONTEXT.copy())
+    return JSONResponse({"reset": True})
+
+
+@app.get("/api/settings/context")
+async def api_get_context(request: Request):
+    """Return current global context as JSON."""
+    return JSONResponse(load_global_context())
+
+
+# ── Settings: GitHub PR Integration ───────────────────────────────────────────
+
+@app.get("/settings/github", response_class=HTMLResponse)
+async def settings_github(request: Request):
+    """GitHub PR integration configuration page."""
+    cfg = load_github_config()
+    return templates.TemplateResponse(
+        request, "github.html", {"config_json": cfg}
+    )
+
+
+@app.post("/api/settings/github/connect")
+async def api_github_connect(request: Request):
+    """Verify and save a GitHub token."""
+    body = await request.json()
+    token = body.get("token", "").strip()
+    if not token:
+        return JSONResponse({"error": "token is required"}, status_code=400)
+
+    try:
+        user_info = await verify_token(token)
+    except Exception as exc:
+        return JSONResponse({"error": f"Token verification failed: {exc}"}, status_code=400)
+
+    cfg = load_github_config()
+    cfg["token"] = token
+    cfg["github_user"] = user_info.get("login", "")
+    cfg["connected"] = True
+    save_github_config(cfg)
+
+    # Start poller if not already running
+    data_dir = request.app.state.data_dir
+    asyncio.create_task(start_poller(data_dir))
+
+    return JSONResponse({"github_user": cfg["github_user"], "connected": True})
+
+
+@app.post("/api/settings/github/disconnect")
+async def api_github_disconnect(request: Request):
+    """Remove GitHub token."""
+    cfg = load_github_config()
+    cfg["token"] = ""
+    cfg["github_user"] = ""
+    cfg["connected"] = False
+    save_github_config(cfg)
+    return JSONResponse({"disconnected": True})
+
+
+@app.post("/api/settings/github/repos")
+async def api_github_add_repo(request: Request):
+    """Add a repo to the watched list."""
+    body = await request.json()
+    repo = body.get("repo", "").strip()
+    if not repo or "/" not in repo:
+        return JSONResponse({"error": "repo must be owner/name format"}, status_code=400)
+    updated = add_watched_repo(repo)
+    return JSONResponse({"watched_repos": updated})
+
+
+@app.delete("/api/settings/github/repos/{full_name:path}")
+async def api_github_remove_repo(full_name: str, request: Request):
+    """Remove a repo from the watched list."""
+    remove_watched_repo(full_name)
+    return JSONResponse({"removed": full_name})
+
+
+@app.post("/api/settings/github")
+async def api_save_github_settings(request: Request):
+    """Save GitHub polling/comment settings."""
+    body = await request.json()
+    cfg = load_github_config()
+    cfg.update({
+        "poll_interval_minutes": body.get("poll_interval_minutes", 5),
+        "comment_threshold": body.get("comment_threshold", "MEDIUM"),
+        "auto_comment": body.get("auto_comment", True),
+        "fail_pr_on_critical": body.get("fail_pr_on_critical", False),
+    })
+    save_github_config(cfg)
+    return JSONResponse({"saved": True})
+
+
+@app.post("/api/github/scan-pr")
+async def api_scan_pr(request: Request):
+    """Manually trigger a scan for a specific GitHub PR URL."""
+    body = await request.json()
+    pr_url = body.get("pr_url", "").strip()
+    if not pr_url:
+        return JSONResponse({"error": "pr_url is required"}, status_code=400)
+
+    parsed = parse_pr_url(pr_url)
+    if not parsed:
+        return JSONResponse({"error": "Invalid GitHub PR URL format"}, status_code=400)
+
+    full_name, pr_number = parsed
+    token = get_github_token()
+    if not token:
+        return JSONResponse({"error": "GitHub not connected — set token in Settings → GitHub PR"}, status_code=400)
+
+    from ..github.pr_scanner import get_pr_changed_files, list_open_prs
+    try:
+        prs = await list_open_prs(token, full_name)
+        pr = next((p for p in prs if p["number"] == pr_number), None)
+        if not pr:
+            return JSONResponse({"error": f"PR #{pr_number} not found or not open"}, status_code=404)
+
+        changed_files = await get_pr_changed_files(token, full_name, pr_number)
+        java_files = [f for f in changed_files if f.endswith(".java")]
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+    data_dir = request.app.state.data_dir
+    run_id = await github_scan_pr(
+        full_name=full_name,
+        pr_number=pr_number,
+        head_sha=pr["head"]["sha"],
+        clone_url=pr["head"]["repo"]["clone_url"],
+        head_ref=pr["head"]["ref"],
+        changed_java_files=java_files,
+        data_dir=data_dir,
+    )
+
+    if not run_id:
+        return JSONResponse({"error": "Failed to start PR scan"}, status_code=500)
+
+    return JSONResponse({
+        "run_id": run_id,
+        "pr_number": pr_number,
+        "java_files": len(java_files),
+        "redirect": f"/scans/{run_id}",
+    })
+
+
+# ── PDF Export ────────────────────────────────────────────────────────────────
+
+@app.get("/api/runs/{run_id}/export/pdf")
+async def export_run_pdf(run_id: str, request: Request):
+    """Generate and return a PDF report for a completed scan run."""
+    try:
+        with get_db() as db:
+            run = db.query(Run).filter(Run.id == run_id).first()
+            if not run:
+                raise HTTPException(status_code=404, detail="Run not found")
+
+            findings = db.query(Finding).filter(Finding.run_id == run_id)\
+                .order_by(Finding.severity).all()
+            agent_runs = db.query(AgentRun).filter(AgentRun.run_id == run_id).all()
+
+            # Eagerly load everything we need before session closes
+            run_data = {
+                "id": run.id,
+                "project_name": run.project_name,
+                "status": run.status,
+                "started_at": run.started_at,
+                "completed_at": run.completed_at,
+                "duration_seconds": run.duration_seconds,
+                "git_branch": run.git_branch,
+                "git_commit": run.git_commit,
+                "score_overall": run.score_overall,
+                "score_security": run.score_security,
+                "score_code_quality": run.score_code_quality,
+                "score_architecture": run.score_architecture,
+                "score_api_design": run.score_api_design,
+                "score_production_readiness": run.score_production_readiness,
+                "score_test_coverage": run.score_test_coverage,
+            }
+
+            findings_data = [
+                type("F", (), {
+                    "severity": f.severity,
+                    "category": f.category,
+                    "subcategory": f.subcategory,
+                    "file_path": f.file_path,
+                    "line_number": f.line_number,
+                    "method_name": f.method_name,
+                    "problem": f.problem,
+                    "fix_description": f.fix_description,
+                    "fix_code": f.fix_code,
+                    "cve_ids": f.cve_ids or [],
+                    "agent_id": f.agent_id,
+                })()
+                for f in findings
+            ]
+
+            agent_runs_data = [
+                type("AR", (), {
+                    "agent_id": ar.agent_id,
+                    "agent_name": ar.agent_name,
+                    "model": ar.model,
+                    "status": ar.status,
+                    "findings_count": ar.findings_count,
+                    "duration_seconds": ar.duration_seconds,
+                })()
+                for ar in agent_runs
+            ]
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Build a simple proxy object for the PDF generator
+    run_obj = type("Run", (), run_data)()
+
+    try:
+        from ..utils.pdf_export import generate_pdf_report
+        pdf_bytes = generate_pdf_report(run_obj, findings_data, agent_runs_data)
+    except ImportError:
+        raise HTTPException(
+            status_code=501,
+            detail="PDF export requires reportlab. Install: pip install reportlab"
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {exc}") from exc
+
+    filename = f"springinsight-{run_obj.project_name}-{run_id[:8]}.pdf"
+    return StreamingResponse(
+        iter([pdf_bytes]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

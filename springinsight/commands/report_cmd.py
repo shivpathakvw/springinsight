@@ -23,15 +23,19 @@ SEV_COLORS = {"CRITICAL": "bold red", "HIGH": "red", "MEDIUM": "yellow", "LOW": 
 @click.option("--severity", "-s", default=None, help="Filter findings by severity (CRITICAL,HIGH,...)")
 @click.option("--agent", "-a", default=None, help="Filter findings by agent ID")
 @click.option("--export", "-e", default=None, help="Export MASTER-REPORT.md to this path")
+@click.option("--pdf", "-p", default=None, metavar="PATH",
+              help="Export PDF report to PATH (e.g. ./report.pdf). Requires: pip install reportlab")
 @click.option("--findings-only", is_flag=True, help="Show only findings table, no scores")
-def report_cmd(work_dir: str, run_id: str | None, severity: str | None, agent: str | None, export: str | None, findings_only: bool):
+def report_cmd(work_dir: str, run_id: str | None, severity: str | None, agent: str | None,
+               export: str | None, pdf: str | None, findings_only: bool):
     """Display the latest (or specified) run report.
 
     Examples:\n
       springinsight report\n
       springinsight report --severity CRITICAL,HIGH\n
       springinsight report --run-id 2026-04-11-abc123\n
-      springinsight report --export /tmp/report.md
+      springinsight report --export /tmp/report.md\n
+      springinsight report --pdf ./my-report.pdf
     """
     work_path = Path(work_dir).expanduser().resolve()
     init_db(work_path)
@@ -162,7 +166,7 @@ def report_cmd(work_dir: str, run_id: str | None, severity: str | None, agent: s
         console.print()
         console.print("[green]No findings match the current filter.[/green]")
 
-    # ── Export ─────────────────────────────────────────────────────────────
+    # ── Export Markdown ────────────────────────────────────────────────────
     if export:
         run_dir = work_path / ".springinsight" / "runs" / run.id
         report_src = run_dir / "MASTER-REPORT.md"
@@ -172,5 +176,23 @@ def report_cmd(work_dir: str, run_id: str | None, severity: str | None, agent: s
             console.print(f"\n[green]Report exported to:[/green] {export}")
         else:
             console.print(f"\n[yellow]Report file not found at {report_src}[/yellow]")
+
+    # ── Export PDF ─────────────────────────────────────────────────────────
+    if pdf:
+        pdf_path = Path(pdf).expanduser().resolve()
+        try:
+            from ..utils.pdf_export import generate_pdf_report
+            with get_db() as db:
+                run_obj = db.query(Run).filter(Run.id == run.id).first()
+                all_findings = db.query(Finding).filter(Finding.run_id == run.id).all()
+                all_agent_runs = db.query(AgentRun).filter(AgentRun.run_id == run.id).all()
+
+            pdf_bytes = generate_pdf_report(run_obj, all_findings, all_agent_runs)
+            pdf_path.write_bytes(pdf_bytes)
+            console.print(f"\n[green]✓ PDF exported to:[/green] [bold]{pdf_path}[/bold]")
+        except ImportError:
+            console.print("\n[red]PDF export requires reportlab:[/red] pip install reportlab")
+        except Exception as exc:
+            console.print(f"\n[red]PDF generation failed:[/red] {exc}")
 
     console.print()

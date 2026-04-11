@@ -6,7 +6,7 @@ import click
 from rich.console import Console
 
 from . import __version__
-from .commands import init_cmd, report_cmd, run_cmd, web_cmd
+from .commands import context_cmd, github_cmd, init_cmd, report_cmd, run_cmd, web_cmd
 from .commands.mcp_cmd import mcp_cmd
 from .utils.env import load_env as _load_env
 
@@ -52,6 +52,8 @@ cli.add_command(run_cmd, name="run")
 cli.add_command(report_cmd, name="report")
 cli.add_command(web_cmd, name="web")
 cli.add_command(mcp_cmd, name="mcp")
+cli.add_command(context_cmd, name="context")
+cli.add_command(github_cmd, name="github")
 
 
 # ── findings subcommand ─────────────────────────────────────────────────────

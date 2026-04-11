@@ -1,7 +1,9 @@
+from .context_cmd import context_cmd
+from .github_cmd import github_cmd
 from .init_cmd import init_cmd
 from .mcp_cmd import mcp_cmd
 from .report_cmd import report_cmd
 from .run_cmd import run_cmd
 from .web_cmd import web_cmd
 
-__all__ = ["init_cmd", "mcp_cmd", "run_cmd", "report_cmd", "web_cmd"]
+__all__ = ["context_cmd", "github_cmd", "init_cmd", "mcp_cmd", "run_cmd", "report_cmd", "web_cmd"]

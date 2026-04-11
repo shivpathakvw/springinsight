@@ -959,25 +959,28 @@
       <div class="card">
         <div style="font-size:1.75rem;margin-bottom:1rem">⌨️</div>
         <h3 style="font-weight:700;margin-bottom:.5rem">CLI</h3>
-        <p style="font-size:.875rem;color:var(--text-mid);margin-bottom:1rem">Full analysis from your terminal. Pipe findings into CI, Slack webhooks, or JIRA. Debug agent progress with <code>--verbose</code>.</p>
+        <p style="font-size:.875rem;color:var(--text-mid);margin-bottom:1rem">Full analysis from your terminal. Project context, PDF exports, GitHub PR scanning — every UI feature has a CLI equivalent.</p>
         <pre style="font-size:.78rem"><code>springinsight run ./my-app
-springinsight run https://github.com/org/repo
 springinsight run ./app --agents A03,A10,A12
-springinsight agents          # list + enable/disable
-springinsight report --severity HIGH
-springinsight history</code></pre>
+springinsight report --pdf ./report.pdf
+springinsight context add-rule "Use constructor injection"
+springinsight context set java-version 21
+springinsight github connect --token ghp_xxxx
+springinsight github watch myorg/service
+springinsight github scan-pr https://github.com/org/repo/pull/42</code></pre>
       </div>
 
       <!-- Web UI -->
       <div class="card">
         <div style="font-size:1.75rem;margin-bottom:1rem">🌐</div>
         <h3 style="font-weight:700;margin-bottom:.5rem">Web UI</h3>
-        <p style="font-size:.875rem;color:var(--text-mid);margin-bottom:1rem">Dark dashboard with live SSE progress, clickable agent cards showing per-agent logs, agent enable/disable, and score history.</p>
+        <p style="font-size:.875rem;color:var(--text-mid);margin-bottom:1rem">Dark dashboard with live SSE progress, clickable agent cards, agent enable/disable, project context editor, PDF export, and GitHub PR integration.</p>
         <pre style="font-size:.78rem"><code>springinsight web --open
 springinsight web --verbose   # agent logs in terminal
-# → http://localhost:8080
-# Click any agent card for live logs
-# Settings → Agents to control cost
+# Settings → Agents      — enable/disable per agent
+# Settings → Context     — custom rules for agents
+# Settings → GitHub PR   — watch repos + auto-comment
+# Scan result → Export PDF
 # Shared DB between CLI + Web UI</code></pre>
       </div>
 
@@ -1018,17 +1021,47 @@ npm install &amp;&amp; npm run compile
 
     </div>
 
-    <!-- Agent cost control callout -->
-    <div class="card" style="padding:1.5rem;border-color:rgba(234,179,8,.2);background:rgba(234,179,8,.04);display:flex;align-items:flex-start;gap:1rem;margin-top:1rem">
+    <!-- Cost control callout -->
+    <div class="card" style="padding:1.5rem;border-color:rgba(234,179,8,.2);background:rgba(234,179,8,.04);display:flex;align-items:flex-start;gap:1rem;margin-top:1rem;margin-bottom:1rem">
       <div style="font-size:1.5rem;flex-shrink:0">💡</div>
       <div>
         <div style="font-weight:700;margin-bottom:.3rem">Control cost with Agent Config</div>
         <p style="font-size:.875rem;color:var(--text-mid)">
           Running all 15 agents costs $3–8 per large project. For quick checks, enable only Phase 1 agents (Haiku, ~$0.05 total).
           Disable expensive Opus agents (A05 Architecture, A08 LLD) unless you need deep architecture analysis.
-          Use the <strong style="color:var(--text)">Settings → Agents</strong> page in the Web UI, or the CLI:
-          <code>springinsight agents</code>.
+          Use the <strong style="color:var(--text)">Settings → Agents</strong> page in the Web UI, or CLI: <code>springinsight agents</code>.
         </p>
+      </div>
+    </div>
+
+    <!-- Project context callout -->
+    <div class="card" style="padding:1.5rem;border-color:rgba(59,130,246,.2);background:rgba(59,130,246,.04);display:flex;align-items:flex-start;gap:1rem;margin-bottom:1rem">
+      <div style="font-size:1.5rem;flex-shrink:0">📋</div>
+      <div>
+        <div style="font-weight:700;margin-bottom:.3rem">Project Context — teach agents your standards</div>
+        <p style="font-size:.875rem;color:var(--text-mid)">
+          Define custom rules that every agent must enforce: "never use field injection", "all endpoints need @PreAuthorize",
+          "use constructor injection only". Set tech-stack hints (Java version, Spring Boot, DB) so agents understand your project.
+          Rules are injected into every agent prompt as <strong style="color:var(--text)">MUST APPLY</strong> constraints.
+          Use <strong style="color:var(--text)">Settings → Project Context</strong> in the Web UI or:
+          <code>springinsight context add-rule "Your rule here"</code>
+        </p>
+      </div>
+    </div>
+
+    <!-- GitHub PR callout -->
+    <div class="card" style="padding:1.5rem;border-color:rgba(34,197,94,.2);background:rgba(34,197,94,.04);display:flex;align-items:flex-start;gap:1rem">
+      <div style="font-size:1.5rem;flex-shrink:0">🔍</div>
+      <div>
+        <div style="font-weight:700;margin-bottom:.3rem">GitHub PR Auto-Scanning — findings on every pull request</div>
+        <p style="font-size:.875rem;color:var(--text-mid)">
+          Connect SpringInsight to your GitHub repos and every new pull request gets scanned automatically.
+          Changed Java files are analysed, a formatted findings summary is posted as a PR comment, and critical findings
+          can be configured to fail the GitHub check. Works with private repos. Polls on a configurable interval (default 5 min).
+        </p>
+        <pre style="font-size:.75rem;margin-top:.75rem"><code>springinsight github connect --token ghp_xxxx
+springinsight github watch myorg/my-spring-service
+springinsight github scan-pr https://github.com/org/repo/pull/42</code></pre>
       </div>
     </div>
   </div>
@@ -1054,13 +1087,16 @@ npm install &amp;&amp; npm run compile
           <li>All 15 agents across 4 phases</li>
           <li>CLI + Web UI + MCP Server + VS Code extension</li>
           <li>Agent enable/disable for cost control</li>
-          <li>SQLite persistent history — shared across tools</li>
+          <li>Project Context — custom rules injected into every agent</li>
+          <li>PDF export of full scan reports</li>
+          <li>GitHub PR auto-scanning + PR comments</li>
+          <li>SQLite persistent history — shared across all tools</li>
           <li>GitHub URL + local path support</li>
           <li>MIT license — use in commercial projects</li>
         </ul>
         <div style="margin-top:1.5rem">
-          <pre style="font-size:.82rem"><code><span style="color:var(--green)">$</span> pip install springinsight
-<span style="color:var(--green)">$</span> pip install "springinsight[web]"
+          <pre style="font-size:.82rem"><code><span style="color:var(--green)">$</span> pip install "springinsight[all]"
+<span style="color:var(--text-dim)"># Includes web, mcp, pdf, github extras</span>
 <span style="color:var(--text-dim)"># Requires: ANTHROPIC_API_KEY</span></code></pre>
         </div>
       </div>

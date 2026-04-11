@@ -1,0 +1,352 @@
+{% extends "base.html" %}
+{% block title %}GitHub PR Integration — SpringInsight{% endblock %}
+{% block nav_extra %}
+<a href="/settings/context" class="nav-item">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+  Project Context
+</a>
+<a href="/settings/agents" class="nav-item">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+  Agents
+</a>
+<a href="/settings/github" class="nav-item active">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.2 11.38.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.54-1.38-1.33-1.75-1.33-1.75-1.09-.74.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.49 1 .11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.17 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 3-.4c1.02.005 2.04.14 3 .4 2.28-1.55 3.29-1.23 3.29-1.23.66 1.65.24 2.87.12 3.17.77.84 1.23 1.91 1.23 3.22 0 4.61-2.8 5.63-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58C20.57 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12z"/></svg>
+  GitHub PR
+</a>
+{% endblock %}
+
+{% block content %}
+<div x-data="githubSettings()" style="padding:32px; max-width:860px;">
+
+  <!-- Header -->
+  <div style="margin-bottom:28px;">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+      <h1 style="font-size:22px; font-weight:700; margin:0;">GitHub PR Integration</h1>
+      <span x-show="config.connected" class="badge badge-green">Connected</span>
+      <span x-show="!config.connected" class="badge badge-gray">Not Connected</span>
+    </div>
+    <p style="color:var(--muted); margin:0; font-size:13px; line-height:1.6;">
+      Connect your GitHub token so SpringInsight can watch repositories,
+      automatically scan pull requests, and post findings summaries as PR comments.
+    </p>
+  </div>
+
+  <!-- Status banner -->
+  <div x-show="banner" x-transition :class="bannerType === 'success' ? 'banner-ok' : 'banner-err'"
+    style="border-radius:8px; padding:12px 16px; margin-bottom:20px; font-size:13px; display:flex; align-items:center; gap:8px;">
+    <span x-text="banner"></span>
+  </div>
+  <style>
+    .banner-ok { background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.3); color:#4ade80; }
+    .banner-err { background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.3); color:#f87171; }
+  </style>
+
+  <!-- Token section -->
+  <div class="card" style="padding:24px; margin-bottom:20px;">
+    <div style="margin-bottom:16px;">
+      <div style="font-size:15px; font-weight:600; margin-bottom:4px;">Personal Access Token</div>
+      <div style="color:var(--muted); font-size:12px;">
+        Create a token at <a href="https://github.com/settings/tokens" target="_blank" style="color:var(--orange);">github.com/settings/tokens</a>
+        with <code>repo</code> scope (to read PRs and post comments on private repos).
+        Stored locally at <code style="color:var(--orange);">~/.springinsight/github.json</code> — never sent to any server.
+      </div>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <input
+        x-model="tokenInput"
+        :type="showToken ? 'text' : 'password'"
+        class="si-input"
+        placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        style="flex:1;"
+      />
+      <button @click="showToken=!showToken" style="background:var(--surface); border:1px solid var(--border); border-radius:7px; padding:0 14px; color:var(--muted); cursor:pointer;">
+        <svg x-show="!showToken" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        <svg x-show="showToken" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+      </button>
+      <button @click="saveToken()" :disabled="!tokenInput.trim() || saving" class="btn-primary" style="white-space:nowrap;">
+        <span x-show="!saving">Connect GitHub</span>
+        <span x-show="saving">Verifying…</span>
+      </button>
+    </div>
+    <div x-show="config.connected && config.github_user" style="margin-top:12px; display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted);">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.2 11.38.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.54-1.38-1.33-1.75-1.33-1.75-1.09-.74.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.49 1 .11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.17 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 3-.4c1.02.005 2.04.14 3 .4 2.28-1.55 3.29-1.23 3.29-1.23.66 1.65.24 2.87.12 3.17.77.84 1.23 1.91 1.23 3.22 0 4.61-2.8 5.63-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58C20.57 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      Authenticated as <strong style="color:var(--text);" x-text="config.github_user"></strong>
+      <button @click="disconnect()" style="margin-left:8px; background:none; border:1px solid var(--border); border-radius:5px; padding:2px 10px; color:var(--muted); font-size:12px; cursor:pointer;">Disconnect</button>
+    </div>
+  </div>
+
+  <!-- Watched Repos -->
+  <div class="card" style="padding:24px; margin-bottom:20px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+      <div>
+        <div style="font-size:15px; font-weight:600; margin-bottom:4px;">Watched Repositories</div>
+        <div style="color:var(--muted); font-size:12px;">Repos to poll for new/updated pull requests.</div>
+      </div>
+    </div>
+
+    <!-- Add repo -->
+    <div style="display:flex; gap:10px; margin-bottom:16px;">
+      <input
+        x-model="newRepo"
+        @keydown.enter="addRepo()"
+        class="si-input"
+        placeholder="owner/repo-name  (e.g. myorg/my-spring-service)"
+        :disabled="!config.connected"
+      />
+      <button @click="addRepo()" :disabled="!newRepo.trim() || !config.connected" class="btn-primary" style="white-space:nowrap;">
+        + Watch Repo
+      </button>
+    </div>
+
+    <!-- Repo list -->
+    <div x-show="config.watched_repos && config.watched_repos.length > 0">
+      <template x-for="(repo, idx) in config.watched_repos" :key="repo.full_name">
+        <div style="display:flex; align-items:center; padding:10px 0; border-top:1px solid var(--border);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="color:var(--muted); margin-right:10px; flex-shrink:0;"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.2 11.38.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.54-1.38-1.33-1.75-1.33-1.75-1.09-.74.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.49 1 .11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.17 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 3-.4c1.02.005 2.04.14 3 .4 2.28-1.55 3.29-1.23 3.29-1.23.66 1.65.24 2.87.12 3.17.77.84 1.23 1.91 1.23 3.22 0 4.61-2.8 5.63-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58C20.57 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12z"/></svg>
+          <span style="flex:1; font-size:13px;" x-text="repo.full_name"></span>
+          <span x-show="repo.last_polled" style="font-size:11px; color:var(--muted); margin-right:12px;">
+            Last polled: <span x-text="repo.last_polled ? new Date(repo.last_polled).toLocaleString() : 'never'"></span>
+          </span>
+          <span x-show="repo.prs_scanned" style="font-size:11px;" class="badge badge-blue" x-text="repo.prs_scanned + ' PRs scanned'"></span>
+          <button @click="removeRepo(idx)" style="margin-left:12px; background:none; border:none; color:var(--muted); cursor:pointer; padding:4px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </template>
+    </div>
+    <div x-show="!config.watched_repos || config.watched_repos.length === 0" style="color:var(--muted); font-size:13px; padding:16px 0; text-align:center;">
+      No repositories added yet.
+    </div>
+  </div>
+
+  <!-- Scan Settings -->
+  <div class="card" style="padding:24px; margin-bottom:20px;">
+    <div style="margin-bottom:16px;">
+      <div style="font-size:15px; font-weight:600; margin-bottom:4px;">Auto-Scan Settings</div>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+      <div>
+        <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:6px;">Poll Interval (minutes)</label>
+        <input x-model.number="config.poll_interval_minutes" type="number" min="1" max="60" class="si-input" />
+        <div style="font-size:11px; color:var(--muted); margin-top:4px;">How often to check for new/updated PRs</div>
+      </div>
+      <div>
+        <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:6px;">Comment Threshold</label>
+        <select x-model="config.comment_threshold" class="si-input">
+          <option value="any">Any finding</option>
+          <option value="LOW">LOW and above</option>
+          <option value="MEDIUM">MEDIUM and above</option>
+          <option value="HIGH">HIGH and above only</option>
+          <option value="CRITICAL">CRITICAL only</option>
+        </select>
+        <div style="font-size:11px; color:var(--muted); margin-top:4px;">Minimum severity to trigger a PR comment</div>
+      </div>
+    </div>
+    <div style="margin-top:16px; display:flex; align-items:center; gap:10px;">
+      <button
+        @click="config.auto_comment = !config.auto_comment"
+        :style="config.auto_comment ? 'background:var(--orange)' : 'background:var(--border)'"
+        style="width:44px; height:24px; border-radius:12px; border:none; cursor:pointer; position:relative; transition:background 0.2s; flex-shrink:0;"
+      >
+        <span :style="config.auto_comment ? 'left:22px' : 'left:2px'" style="position:absolute; top:2px; width:20px; height:20px; background:#fff; border-radius:50%; transition:left 0.2s;"></span>
+      </button>
+      <span style="font-size:13px;">Auto-post PR comment when scan completes</span>
+    </div>
+    <div style="margin-top:10px; display:flex; align-items:center; gap:10px;">
+      <button
+        @click="config.fail_pr_on_critical = !config.fail_pr_on_critical"
+        :style="config.fail_pr_on_critical ? 'background:var(--orange)' : 'background:var(--border)'"
+        style="width:44px; height:24px; border-radius:12px; border:none; cursor:pointer; position:relative; transition:background 0.2s; flex-shrink:0;"
+      >
+        <span :style="config.fail_pr_on_critical ? 'left:22px' : 'left:2px'" style="position:absolute; top:2px; width:20px; height:20px; background:#fff; border-radius:50%; transition:left 0.2s;"></span>
+      </button>
+      <span style="font-size:13px;">Mark GitHub check as failed if CRITICAL findings found</span>
+    </div>
+  </div>
+
+  <!-- Manual scan -->
+  <div class="card" style="padding:24px; margin-bottom:24px;">
+    <div style="margin-bottom:14px;">
+      <div style="font-size:15px; font-weight:600; margin-bottom:4px;">Scan a Specific PR</div>
+      <div style="color:var(--muted); font-size:12px;">Trigger an immediate scan on any pull request URL.</div>
+    </div>
+    <div style="display:flex; gap:10px;">
+      <input x-model="prUrl" class="si-input" placeholder="https://github.com/owner/repo/pull/123" :disabled="!config.connected" />
+      <button @click="scanPr()" :disabled="!prUrl.trim() || !config.connected || scanningPr" class="btn-primary" style="white-space:nowrap;">
+        <span x-show="!scanningPr">Scan PR</span>
+        <span x-show="scanningPr">Scanning…</span>
+      </button>
+    </div>
+    <div x-show="prScanResult" x-transition style="margin-top:10px; font-size:12px; color:#60a5fa;" x-text="prScanResult"></div>
+  </div>
+
+  <!-- Save -->
+  <div style="display:flex; gap:12px; align-items:center;">
+    <button @click="saveSettings()" class="btn-primary">Save Settings</button>
+    <span style="font-size:12px; color:var(--muted);">Config at <code style="color:var(--orange);">~/.springinsight/github.json</code></span>
+  </div>
+
+  <!-- CLI reference -->
+  <div style="margin-top:28px; padding:16px; background:var(--surface); border-radius:8px; border:1px solid var(--border);">
+    <div style="font-size:12px; color:var(--muted); margin-bottom:10px; font-weight:600; letter-spacing:.05em; text-transform:uppercase;">CLI Equivalent</div>
+    <div class="code-block">
+# Connect GitHub token
+springinsight github connect --token ghp_xxxx
+
+# Watch a repository for PR scanning
+springinsight github watch myorg/my-spring-service
+
+# List watched repositories
+springinsight github repos
+
+# Manually scan a specific PR
+springinsight github scan-pr https://github.com/myorg/service/pull/42
+
+# Poll once manually (useful in CI pipelines)
+springinsight github poll
+
+# Unwatch a repo
+springinsight github unwatch myorg/my-spring-service</div>
+  </div>
+
+  <!-- PR Comment preview -->
+  <div style="margin-top:20px; padding:16px; background:var(--surface); border-radius:8px; border:1px solid var(--border);">
+    <div style="font-size:12px; color:var(--muted); margin-bottom:10px; font-weight:600; letter-spacing:.05em; text-transform:uppercase;">Sample PR Comment</div>
+    <div style="background:#0d1117; border:1px solid #30363d; border-radius:6px; padding:16px; font-family:monospace; font-size:12px; color:#c9d1d9; line-height:1.7;">
+      <div style="color:#58a6ff; font-weight:600;">## ⚡ SpringInsight Analysis</div>
+      <div style="color:#8b949e;">_Automated scan of 23 changed Java files_</div>
+      <br/>
+      <div>| Severity | Count |</div>
+      <div>|----------|-------|</div>
+      <div>| 🔴 CRITICAL | 1 |</div>
+      <div>| 🟠 HIGH | 3 |</div>
+      <div>| 🟡 MEDIUM | 7 |</div>
+      <div>| 🔵 LOW | 12 |</div>
+      <br/>
+      <div style="color:#f85149;">**🔴 CRITICAL — SQL Injection Risk**</div>
+      <div>`UserRepository.java:142` — Concatenated query string with user input</div>
+      <div style="color:#3fb950;">Fix: Use `@Query` with named parameters or `JpaRepository` derived queries</div>
+      <br/>
+      <div style="color:#8b949e;">_[View full report →](http://localhost:8765/scans/run-id-here)_</div>
+      <div style="color:#8b949e; font-size:11px;">Overall score: 72/100 | Powered by SpringInsight v0.3.0</div>
+    </div>
+  </div>
+</div>
+
+<script>
+function githubSettings() {
+  const INITIAL = {{ config_json | tojson }};
+  return {
+    config: {
+      connected: INITIAL.connected || false,
+      github_user: INITIAL.github_user || '',
+      watched_repos: INITIAL.watched_repos || [],
+      poll_interval_minutes: INITIAL.poll_interval_minutes || 5,
+      comment_threshold: INITIAL.comment_threshold || 'MEDIUM',
+      auto_comment: INITIAL.auto_comment !== false,
+      fail_pr_on_critical: INITIAL.fail_pr_on_critical || false,
+    },
+    tokenInput: '',
+    showToken: false,
+    newRepo: '',
+    prUrl: '',
+    prScanResult: '',
+    scanningPr: false,
+    saving: false,
+    banner: '',
+    bannerType: 'success',
+
+    showBanner(msg, type='success') {
+      this.banner = msg; this.bannerType = type;
+      setTimeout(() => this.banner = '', 4000);
+    },
+
+    async saveToken() {
+      this.saving = true;
+      try {
+        const res = await fetch('/api/settings/github/connect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: this.tokenInput }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          this.config.connected = true;
+          this.config.github_user = data.github_user;
+          this.tokenInput = '';
+          this.showBanner('✓ Connected to GitHub as ' + data.github_user);
+        } else {
+          this.showBanner('✗ ' + (data.error || 'Failed to connect'), 'error');
+        }
+      } finally { this.saving = false; }
+    },
+
+    async disconnect() {
+      await fetch('/api/settings/github/disconnect', { method: 'POST' });
+      this.config.connected = false;
+      this.config.github_user = '';
+      this.showBanner('Disconnected from GitHub');
+    },
+
+    async addRepo() {
+      if (!this.newRepo.trim()) return;
+      const res = await fetch('/api/settings/github/repos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repo: this.newRepo.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        this.config.watched_repos = data.watched_repos;
+        this.newRepo = '';
+        this.showBanner('Repository added to watch list');
+      } else {
+        this.showBanner('✗ ' + (data.error || 'Failed'), 'error');
+      }
+    },
+
+    async removeRepo(idx) {
+      const repo = this.config.watched_repos[idx];
+      const res = await fetch('/api/settings/github/repos/' + encodeURIComponent(repo.full_name), { method: 'DELETE' });
+      if (res.ok) {
+        this.config.watched_repos.splice(idx, 1);
+        this.showBanner('Repository removed');
+      }
+    },
+
+    async scanPr() {
+      if (!this.prUrl.trim()) return;
+      this.scanningPr = true;
+      try {
+        const res = await fetch('/api/github/scan-pr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pr_url: this.prUrl }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          this.prScanResult = '✓ Scan queued — run ID: ' + data.run_id;
+          if (data.redirect) window.open(data.redirect, '_blank');
+        } else {
+          this.prScanResult = '✗ ' + (data.error || 'Failed to start PR scan');
+        }
+      } finally { this.scanningPr = false; }
+    },
+
+    async saveSettings() {
+      const res = await fetch('/api/settings/github', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          poll_interval_minutes: this.config.poll_interval_minutes,
+          comment_threshold: this.config.comment_threshold,
+          auto_comment: this.config.auto_comment,
+          fail_pr_on_critical: this.config.fail_pr_on_critical,
+        }),
+      });
+      if (res.ok) this.showBanner('✓ Settings saved');
+    },
+  };
+}
+</script>
+{% endblock %}

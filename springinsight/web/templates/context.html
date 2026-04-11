@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+{% block title %}Project Context — SpringInsight{% endblock %}
+{% block nav_extra %}
+<a href="/settings/context" class="nav-item active">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+  Project Context
+</a>
+<a href="/settings/agents" class="nav-item">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+  Agents
+</a>
+<a href="/settings/github" class="nav-item">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.2 11.38.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.54-1.38-1.33-1.75-1.33-1.75-1.09-.74.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.49 1 .11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.17 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 3-.4c1.02.005 2.04.14 3 .4 2.28-1.55 3.29-1.23 3.29-1.23.66 1.65.24 2.87.12 3.17.77.84 1.23 1.91 1.23 3.22 0 4.61-2.8 5.63-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58C20.57 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12z"/></svg>
+  GitHub PR
+</a>
+{% endblock %}
+
+{% block content %}
+<div x-data="contextSettings()" style="padding:32px; max-width:860px;">
+
+  <!-- Header -->
+  <div style="margin-bottom:28px;">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+      <h1 style="font-size:22px; font-weight:700; margin:0;">Project Context</h1>
+      <span class="badge badge-blue">Global Default</span>
+    </div>
+    <p style="color:var(--muted); margin:0; font-size:13px; line-height:1.6;">
+      Define global rules and tech-stack hints that every agent will treat as
+      the authoritative context for your projects. These are merged into every
+      scan — per-project <code style="font-size:12px; color:var(--orange);">context.yaml</code> values take precedence.
+    </p>
+  </div>
+
+  <!-- Save banner -->
+  <div x-show="saved" x-transition style="background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.3); border-radius:8px; padding:12px 16px; margin-bottom:20px; color:#4ade80; font-size:13px; display:flex; align-items:center; gap:8px;">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+    Context saved — all future scans will use these settings.
+  </div>
+
+  <!-- Custom Rules -->
+  <div class="card" style="padding:24px; margin-bottom:20px;">
+    <div style="margin-bottom:16px;">
+      <div style="font-size:15px; font-weight:600; margin-bottom:4px;">Custom Rules</div>
+      <div style="color:var(--muted); font-size:12px;">
+        Instructions that ALL agents must follow. One rule per line. These appear as
+        <strong style="color:var(--text);">MUST APPLY</strong> constraints in every agent prompt.
+      </div>
+    </div>
+    <textarea
+      x-model="form.custom_rules_text"
+      class="si-input"
+      style="height:180px; resize:vertical; font-family: 'JetBrains Mono', monospace; font-size:12.5px; line-height:1.7;"
+      placeholder="Never use field injection (@Autowired on fields) — use constructor injection only
+All public API endpoints must have @PreAuthorize annotations
+No hardcoded secrets or credentials in source code
+Use ResponseEntity<T> for all REST controller return types
+All services must have unit tests with ≥80% coverage
+Database queries must use named parameters, not string concatenation
+Custom exception handler must extend BaseException from com.example.common"
+    ></textarea>
+    <div style="margin-top:8px; font-size:11px; color:var(--muted);">
+      <span x-text="ruleCount()"></span> rule(s) defined
+    </div>
+  </div>
+
+  <!-- Tech Stack Defaults -->
+  <div class="card" style="padding:24px; margin-bottom:20px;">
+    <div style="margin-bottom:16px;">
+      <div style="font-size:15px; font-weight:600; margin-bottom:4px;">Default Tech Stack</div>
+      <div style="color:var(--muted); font-size:12px;">Hints for agents when no per-project <code>context.yaml</code> is found.</div>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+      <div>
+        <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:6px;">Java Version</label>
+        <select x-model="form.java_version" class="si-input">
+          <option value="8">Java 8</option>
+          <option value="11">Java 11</option>
+          <option value="17">Java 17</option>
+          <option value="21">Java 21</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:6px;">Spring Boot Version</label>
+        <select x-model="form.spring_boot_version" class="si-input">
+          <option value="2.7.x">2.7.x</option>
+          <option value="3.0.x">3.0.x</option>
+          <option value="3.1.x">3.1.x</option>
+          <option value="3.2.x">3.2.x</option>
+          <option value="3.3.x">3.3.x</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:6px;">Build Tool</label>
+        <select x-model="form.build_tool" class="si-input">
+          <option value="maven">Maven</option>
+          <option value="gradle">Gradle</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:6px;">Database</label>
+        <select x-model="form.database" class="si-input">
+          <option value="mysql">MySQL</option>
+          <option value="postgresql">PostgreSQL</option>
+          <option value="oracle">Oracle</option>
+          <option value="mongodb">MongoDB</option>
+          <option value="h2">H2 (embedded)</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:6px;">Authentication</label>
+        <select x-model="form.auth" class="si-input">
+          <option value="jwt">JWT</option>
+          <option value="oauth2">OAuth2</option>
+          <option value="keycloak">Keycloak</option>
+          <option value="session">Session-based</option>
+          <option value="basic">Basic Auth</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:6px;">API Type</label>
+        <select x-model="form.api_type" class="si-input">
+          <option value="rest">REST</option>
+          <option value="graphql">GraphQL</option>
+          <option value="grpc">gRPC</option>
+          <option value="mixed">Mixed</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Exclusions -->
+  <div class="card" style="padding:24px; margin-bottom:20px;">
+    <div style="margin-bottom:16px;">
+      <div style="font-size:15px; font-weight:600; margin-bottom:4px;">Path Exclusions</div>
+      <div style="color:var(--muted); font-size:12px;">Glob patterns for files/directories to skip. One per line.</div>
+    </div>
+    <textarea
+      x-model="form.exclude_paths_text"
+      class="si-input"
+      style="height:100px; resize:vertical; font-family: monospace; font-size:12px;"
+      placeholder="*/target/*&#10;*/build/*&#10;*/.git/*&#10;*/node_modules/*&#10;*/generated-sources/*"
+    ></textarea>
+  </div>
+
+  <!-- Multi-tenancy -->
+  <div class="card" style="padding:24px; margin-bottom:24px;">
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <div>
+        <div style="font-size:15px; font-weight:600; margin-bottom:4px;">Multi-tenancy</div>
+        <div style="color:var(--muted); font-size:12px;">Enables tenant-isolation checks in security agent.</div>
+      </div>
+      <button
+        @click="form.multi_tenancy = !form.multi_tenancy"
+        :style="form.multi_tenancy ? 'background:var(--orange)' : 'background:var(--border)'"
+        style="width:44px; height:24px; border-radius:12px; border:none; cursor:pointer; position:relative; transition:background 0.2s; flex-shrink:0;"
+      >
+        <span
+          :style="form.multi_tenancy ? 'left:22px' : 'left:2px'"
+          style="position:absolute; top:2px; width:20px; height:20px; background:#fff; border-radius:50%; transition:left 0.2s;"
+        ></span>
+      </button>
+    </div>
+    <div x-show="form.multi_tenancy" x-transition style="margin-top:16px; display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+      <div>
+        <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:6px;">Tenant Filter Class</label>
+        <input x-model="form.tenant_filter_class" class="si-input" placeholder="com.example.filter.TenantFilter" />
+      </div>
+      <div>
+        <label style="font-size:12px; color:var(--muted); display:block; margin-bottom:6px;">Base Entity Class</label>
+        <input x-model="form.base_entity" class="si-input" placeholder="com.example.entity.BaseEntity" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Action buttons -->
+  <div style="display:flex; gap:12px; align-items:center;">
+    <button @click="save()" :disabled="saving" class="btn-primary">
+      <span x-show="!saving">Save Context</span>
+      <span x-show="saving">Saving…</span>
+    </button>
+    <button @click="reset()" style="background:transparent; border:1px solid var(--border); color:var(--muted); border-radius:7px; padding:10px 18px; font-size:14px; cursor:pointer;">
+      Reset to Defaults
+    </button>
+    <span style="font-size:12px; color:var(--muted); margin-left:8px;">
+      Stored at <code style="color:var(--orange);">~/.springinsight/global-context.yaml</code>
+    </span>
+  </div>
+
+  <!-- CLI hint -->
+  <div style="margin-top:28px; padding:16px; background:var(--surface); border-radius:8px; border:1px solid var(--border);">
+    <div style="font-size:12px; color:var(--muted); margin-bottom:10px; font-weight:600; letter-spacing:.05em; text-transform:uppercase;">CLI Equivalent</div>
+    <div class="code-block">
+# View global context
+springinsight context show
+
+# Add a custom rule
+springinsight context add-rule "Never use field injection"
+
+# Remove a rule (by index)
+springinsight context remove-rule 0
+
+# Set a tech-stack value
+springinsight context set java-version 21
+springinsight context set spring-boot 3.3.x
+
+# Reset to defaults
+springinsight context reset
+
+# Or edit context.yaml directly for per-project rules
+springinsight init  # creates context.yaml in your project</div>
+  </div>
+</div>
+
+<script>
+function contextSettings() {
+  const INITIAL = {{ context_json | tojson }};
+  return {
+    form: {
+      custom_rules_text: (INITIAL.patterns?.custom_rules || []).join('\n'),
+      java_version: String(INITIAL.tech_stack?.java_version || 17),
+      spring_boot_version: INITIAL.tech_stack?.spring_boot_version || '3.2.x',
+      build_tool: INITIAL.tech_stack?.build_tool || 'maven',
+      database: INITIAL.tech_stack?.database || 'mysql',
+      auth: INITIAL.tech_stack?.auth || 'jwt',
+      api_type: INITIAL.tech_stack?.api_type || 'rest',
+      exclude_paths_text: (INITIAL.exclusions?.paths || []).join('\n'),
+      multi_tenancy: INITIAL.patterns?.multi_tenancy || false,
+      tenant_filter_class: INITIAL.patterns?.tenant_filter_class || '',
+      base_entity: INITIAL.patterns?.base_entity || '',
+    },
+    saving: false,
+    saved: false,
+
+    ruleCount() {
+      return this.form.custom_rules_text.trim()
+        ? this.form.custom_rules_text.split('\n').filter(l => l.trim()).length
+        : 0;
+    },
+
+    async save() {
+      this.saving = true;
+      const payload = {
+        patterns: {
+          custom_rules: this.form.custom_rules_text.split('\n').filter(l => l.trim()),
+          multi_tenancy: this.form.multi_tenancy,
+          tenant_filter_class: this.form.tenant_filter_class,
+          base_entity: this.form.base_entity,
+        },
+        tech_stack: {
+          java_version: parseInt(this.form.java_version),
+          spring_boot_version: this.form.spring_boot_version,
+          build_tool: this.form.build_tool,
+          database: this.form.database,
+          auth: this.form.auth,
+          api_type: this.form.api_type,
+        },
+        exclusions: {
+          paths: this.form.exclude_paths_text.split('\n').filter(l => l.trim()),
+          packages: ['*.generated.*', '*.test.*'],
+        },
+      };
+      try {
+        const res = await fetch('/api/settings/context', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          this.saved = true;
+          setTimeout(() => this.saved = false, 3500);
+        }
+      } finally {
+        this.saving = false;
+      }
+    },
+
+    async reset() {
+      if (!confirm('Reset global context to defaults?')) return;
+      await fetch('/api/settings/context/reset', { method: 'POST' });
+      window.location.reload();
+    },
+  };
+}
+</script>
+{% endblock %}
