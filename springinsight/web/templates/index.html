@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}SpringInsight — Dashboard{% endblock %}
+{% block nav_home %}active{% endblock %}
+
+{% block content %}
+<div style="padding:36px 40px; max-width:900px;" x-data="dashboard()">
+
+  <!-- Page header -->
+  <div style="margin-bottom:32px;">
+    <h1 style="font-size:22px; font-weight:700; color:var(--text); margin:0 0 6px;">Codebase Intelligence</h1>
+    <p style="color:var(--muted); margin:0; font-size:13px;">Scan any Spring Boot project for security vulnerabilities, dead code, misconfigurations, and more.</p>
+  </div>
+
+  <!-- ── Scan input card ── -->
+  <div class="card" style="padding:24px; margin-bottom:32px;">
+    <div style="display:flex; gap:12px; align-items:flex-end;">
+      <div style="flex:1;">
+        <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:8px;">
+          GitHub Repository URL or Local Path
+        </label>
+        <input
+          x-model="repoUrl"
+          type="text"
+          placeholder="https://github.com/owner/my-spring-app  or  /Users/me/projects/api-service"
+          class="si-input"
+          @keydown.enter="startScan()"
+          :disabled="scanning"
+        >
+      </div>
+      <button class="btn-primary" @click="startScan()" :disabled="scanning || !repoUrl.trim()">
+        <span x-show="!scanning" style="display:flex; align-items:center; gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5,3 19,12 5,21"/></svg>
+          Start Scan
+        </span>
+        <span x-show="scanning" style="display:flex; align-items:center; gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>
+          Starting…
+        </span>
+      </button>
+    </div>
+
+    <!-- Error state -->
+    <div x-show="error" x-cloak style="margin-top:12px; padding:10px 14px; background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.2); border-radius:6px; color:#f87171; font-size:13px;" x-text="error"></div>
+
+    <!-- Phase 1 agents info -->
+    <div style="margin-top:16px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+      <span style="font-size:11px; color:var(--muted);">Active agents:</span>
+      <span class="badge badge-green">A03 CVE Scanner</span>
+      <span class="badge badge-green">A10 Dead Code</span>
+      <span class="badge badge-green">A12 Config Review</span>
+      <span class="badge badge-gray" style="opacity:.6;">+11 coming soon</span>
+    </div>
+  </div>
+
+  <!-- ── Stats row ── -->
+  {% if db_runs or live_runs %}
+  <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:28px;">
+    {% set total = db_runs|length + live_runs|length %}
+    {% set completed = db_runs|selectattr('status','eq','complete')|list|length %}
+    {% set running = live_runs|selectattr('status','in',['pending','running'])|list|length %}
+    <div class="card" style="padding:16px 20px;">
+      <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px;">Total Scans</div>
+      <div style="font-size:28px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--text);">{{ total }}</div>
+    </div>
+    <div class="card" style="padding:16px 20px;">
+      <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px;">Completed</div>
+      <div style="font-size:28px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--green);">{{ completed }}</div>
+    </div>
+    <div class="card" style="padding:16px 20px;">
+      <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px;">Running</div>
+      <div style="font-size:28px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--blue);">{{ running }}</div>
+    </div>
+    <div class="card" style="padding:16px 20px;">
+      <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px;">Agents Ready</div>
+      <div style="font-size:28px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--orange);">3</div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ── Recent scans ── -->
+  <div>
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+      <h2 style="font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0;">Recent Scans</h2>
+    </div>
+
+    {% if not db_runs and not live_runs %}
+    <div class="card" style="padding:52px 24px; text-align:center;">
+      <div style="font-size:36px; margin-bottom:12px;">⚡</div>
+      <div style="color:var(--text); font-weight:600; margin-bottom:6px;">No scans yet</div>
+      <div style="color:var(--muted); font-size:13px;">Enter a GitHub URL or local path above to start your first scan</div>
+    </div>
+
+    {% else %}
+    <div class="card" style="overflow:hidden;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Project</th>
+            <th>Status</th>
+            <th>Score</th>
+            <th>Security</th>
+            <th>Findings</th>
+            <th>Started</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Live scans first -->
+          {% for s in live_runs %}
+          <tr>
+            <td>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <div class="dot dot-{{ s.status }}"></div>
+                <span style="font-family:monospace; font-size:13px;">{{ s.project_name or s.repo_url }}</span>
+              </div>
+            </td>
+            <td>
+              <span class="badge badge-blue">● Scanning</span>
+            </td>
+            <td style="color:var(--muted);">—</td>
+            <td style="color:var(--muted);">—</td>
+            <td style="font-variant-numeric:tabular-nums;">{{ s.findings_count }}</td>
+            <td style="color:var(--muted);">just now</td>
+            <td>
+              <a href="/scans/{{ s.run_id }}" style="color:var(--orange); font-size:12px; font-weight:500;">
+                Live →
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+
+          <!-- DB runs -->
+          {% for run in db_runs %}
+          {% if run.status == 'complete' %}
+            {% set score = run.score_overall %}
+            {% if score and score >= 80 %}{% set sc = 'var(--green)' %}
+            {% elif score and score >= 60 %}{% set sc = 'var(--yellow)' %}
+            {% elif score %}{% set sc = 'var(--red)' %}
+            {% else %}{% set sc = 'var(--muted)' %}{% endif %}
+          {% endif %}
+          <tr>
+            <td>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <div class="dot dot-{{ run.status }}"></div>
+                <span style="font-family:monospace; font-size:13px;">{{ run.project_name }}</span>
+              </div>
+            </td>
+            <td>
+              {% if run.status == 'complete' %}
+                <span class="badge badge-green">✓ Complete</span>
+              {% elif run.status == 'running' %}
+                <span class="badge badge-blue">● Running</span>
+              {% else %}
+                <span class="badge badge-red">✗ Failed</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if run.score_overall is not none %}
+                <span style="font-variant-numeric:tabular-nums; color:{{ sc }}; font-weight:600;">{{ run.score_overall }}<span style="font-size:11px;color:var(--muted);">/100</span></span>
+              {% else %}
+                <span style="color:var(--muted);">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if run.score_security is not none %}
+                <span style="font-variant-numeric:tabular-nums; font-size:13px;">{{ run.score_security }}<span style="font-size:11px;color:var(--muted);">/100</span></span>
+              {% else %}
+                <span style="color:var(--muted);">—</span>
+              {% endif %}
+            </td>
+            <td style="font-variant-numeric:tabular-nums;">
+              {{ run.findings|length if run.findings else '—' }}
+            </td>
+            <td style="color:var(--muted); font-size:12px;">
+              {{ run.started_at.strftime('%b %d, %H:%M') if run.started_at else '?' }}
+            </td>
+            <td>
+              <a href="/scans/{{ run.id }}/report" style="color:var(--orange); font-size:12px; font-weight:500; white-space:nowrap;">
+                View →
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+[x-cloak] { display: none !important; }
+</style>
+
+<script>
+function dashboard() {
+  return {
+    repoUrl: '',
+    scanning: false,
+    error: '',
+
+    async startScan() {
+      const url = this.repoUrl.trim();
+      if (!url) { this.error = 'Please enter a repository URL or local path.'; return; }
+      this.error = '';
+      this.scanning = true;
+      try {
+        const res = await fetch('/api/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ repo_url: url }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          this.error = data.error || 'Failed to start scan.';
+          this.scanning = false;
+          return;
+        }
+        window.location.href = data.redirect;
+      } catch (e) {
+        this.error = 'Network error: ' + e.message;
+        this.scanning = false;
+      }
+    }
+  };
+}
+</script>
+{% endblock %}

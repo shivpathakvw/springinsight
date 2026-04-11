@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}SpringInsight{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    :root {
+      --bg:        #08080b;
+      --surface:   #0f0f13;
+      --card:      #111116;
+      --border:    #1c1c24;
+      --border-hi: #2a2a36;
+      --text:      #e8e8f0;
+      --muted:     #6b6b80;
+      --orange:    #f97316;
+      --orange-hi: #fb923c;
+      --green:     #22c55e;
+      --blue:      #3b82f6;
+      --red:       #ef4444;
+      --yellow:    #eab308;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    a { color: inherit; text-decoration: none; }
+    /* Cards */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    /* Sidebar nav items */
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 7px 12px; border-radius: 6px;
+      color: var(--muted); font-size: 13px; font-weight: 500;
+      transition: all 0.12s ease; cursor: pointer;
+    }
+    .nav-item:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+    .nav-item.active { background: rgba(249,115,22,0.12); color: var(--orange); }
+    .nav-item svg { flex-shrink: 0; }
+    /* Badges */
+    .badge {
+      display: inline-flex; align-items: center;
+      padding: 2px 8px; border-radius: 4px;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .badge-green  { background: rgba(34,197,94,.15);  color: #4ade80; }
+    .badge-blue   { background: rgba(59,130,246,.15);  color: #60a5fa; }
+    .badge-red    { background: rgba(239,68,68,.15);   color: #f87171; }
+    .badge-yellow { background: rgba(234,179,8,.15);   color: #facc15; }
+    .badge-orange { background: rgba(249,115,22,.15);  color: #fb923c; }
+    .badge-gray   { background: rgba(107,114,128,.12); color: #9ca3af; }
+    .badge-purple { background: rgba(168,85,247,.15);  color: #c084fc; }
+    /* Severity */
+    .sev-CRITICAL { color: #f87171; font-weight: 700; }
+    .sev-HIGH     { color: #fb923c; font-weight: 600; }
+    .sev-MEDIUM   { color: #facc15; }
+    .sev-LOW      { color: #60a5fa; }
+    .sev-INFO     { color: var(--muted); }
+    /* Score bars */
+    .score-bar {
+      height: 5px; border-radius: 3px;
+      background: var(--border);
+      overflow: hidden;
+    }
+    .score-fill { height: 100%; border-radius: 3px; transition: width 1s ease; }
+    .score-fill-green  { background: linear-gradient(90deg, #16a34a, #22c55e); }
+    .score-fill-yellow { background: linear-gradient(90deg, #a16207, #eab308); }
+    .score-fill-red    { background: linear-gradient(90deg, #991b1b, #ef4444); }
+    /* Status dot */
+    .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dot-pending  { background: var(--muted); }
+    .dot-running  { background: var(--blue); box-shadow: 0 0 8px var(--blue); animation: pulse 1.4s infinite; }
+    .dot-complete { background: var(--green); }
+    .dot-failed   { background: var(--red); }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    /* Table */
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th {
+      text-align: left; padding: 10px 14px;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .data-table td {
+      padding: 11px 14px; border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover td { background: rgba(255,255,255,0.02); }
+    /* Input */
+    .si-input {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text);
+      padding: 10px 14px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
+    .si-input:focus { border-color: var(--orange); }
+    .si-input::placeholder { color: var(--muted); }
+    /* Button */
+    .btn-primary {
+      background: var(--orange);
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      padding: 10px 22px;
+      font-size: 14px; font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      white-space: nowrap;
+    }
+    .btn-primary:hover { background: var(--orange-hi); }
+    .btn-primary:active { transform: scale(0.98); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    /* Code block */
+    .code-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      font-family: "Fira Code", "JetBrains Mono", monospace;
+      font-size: 12px;
+      color: #a8b5c8;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 3px; }
+    /* Logo glow */
+    .logo-text { text-shadow: 0 0 20px rgba(249,115,22,0.4); }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <div style="display:flex; min-height:100vh;">
+
+    <!-- ── Sidebar ── -->
+    <aside style="width:220px; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; position:sticky; top:0; height:100vh; overflow-y:auto;">
+
+      <!-- Logo -->
+      <a href="/" style="display:flex; align-items:center; gap:10px; padding:20px 16px; border-bottom:1px solid var(--border); text-decoration:none;">
+        <span style="font-size:22px; line-height:1;">⚡</span>
+        <div>
+          <div class="logo-text" style="font-size:15px; font-weight:800; color:var(--orange); letter-spacing:-0.02em;">SpringInsight</div>
+          <div style="font-size:10px; color:var(--muted); margin-top:1px;">for Spring Boot</div>
+        </div>
+      </a>
+
+      <!-- Nav -->
+      <nav style="padding:10px 8px; flex:1;">
+        <a href="/" class="nav-item {% block nav_home %}{% endblock %}">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          Dashboard
+        </a>
+        {% block nav_extra %}{% endblock %}
+      </nav>
+
+      <!-- Footer -->
+      <div style="padding:14px 16px; border-top:1px solid var(--border);">
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+          <span style="font-size:11px; color:var(--muted);">v0.1.0</span>
+          <a href="https://github.com/shivpathakvw/springinsight" target="_blank"
+             style="font-size:11px; color:var(--muted); display:flex; align-items:center; gap:4px;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.2 11.38.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.54-1.38-1.33-1.75-1.33-1.75-1.09-.74.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.49 1 .11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.17 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 3-.4c1.02.005 2.04.14 3 .4 2.28-1.55 3.29-1.23 3.29-1.23.66 1.65.24 2.87.12 3.17.77.84 1.23 1.91 1.23 3.22 0 4.61-2.8 5.63-5.48 5.92.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58C20.57 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12z"/></svg>
+            GitHub
+          </a>
+        </div>
+        <div style="margin-top:6px; font-size:10px; color:var(--muted);">by Shiv Chandra Pathak</div>
+      </div>
+    </aside>
+
+    <!-- ── Main content ── -->
+    <main style="flex:1; overflow:auto; min-width:0;">
+      {% block content %}{% endblock %}
+    </main>
+
+  </div>
+</body>
+</html>

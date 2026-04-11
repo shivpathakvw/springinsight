@@ -1,0 +1,81 @@
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ── Virtual environments ───────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.env.bak
+.venv.bak
+
+# ── Secrets — NEVER commit these ──────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*_secret*
+*_credentials*
+
+# ── SpringInsight runtime data ────────────────────────────────────────────────
+.springinsight/
+~/.springinsight/
+
+# ── Editors ───────────────────────────────────────────────────────────────────
+.idea/
+*.iml
+*.iws
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+*.py,cover
+
+# ── Ruff / linting ────────────────────────────────────────────────────────────
+.ruff_cache/
+
+# ── Java (if test projects are checked in) ────────────────────────────────────
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+*.log
+*.sqlite
+*.db
+tmp/

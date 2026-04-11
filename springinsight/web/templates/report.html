@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block title %}Report: {{ run.project_name }} — SpringInsight{% endblock %}
+
+{% block nav_extra %}
+<a href="/scans/{{ run.id }}/report" class="nav-item active">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+  Report
+</a>
+{% endblock %}
+
+{% block content %}
+<div style="padding:28px 40px; max-width:1100px;" x-data="report()">
+
+  <!-- Breadcrumb + header -->
+  <div style="margin-bottom:24px;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; font-size:12px; color:var(--muted);">
+      <a href="/">Dashboard</a>
+      <span>›</span>
+      <span>{{ run.project_name }}</span>
+      <span>›</span>
+      <span>Report #{{ run.id }}</span>
+    </div>
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+      <div>
+        <h1 style="font-size:20px; font-weight:700; margin:0 0 4px;">{{ run.project_name }}</h1>
+        <div style="color:var(--muted); font-size:12px; font-family:monospace;">
+          {% if run.source_url %}{{ run.source_url }}{% endif %}
+          · Started {{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '?' }}
+          {% if run.completed_at %}· Completed {{ run.completed_at.strftime('%H:%M') }}{% endif %}
+        </div>
+      </div>
+      <span class="badge badge-{{ 'green' if run.status == 'complete' else 'red' }}" style="font-size:12px;">
+        {{ '✓ Complete' if run.status == 'complete' else '✗ Failed' }}
+      </span>
+    </div>
+  </div>
+
+  <!-- ── Score dashboard ── -->
+  {% if run.score_overall is not none %}
+  <div style="display:grid; grid-template-columns:200px 1fr; gap:16px; margin-bottom:28px;">
+
+    <!-- Overall score -->
+    <div class="card" style="padding:24px; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center;">
+      {% set oc = score_color(run.score_overall) %}
+      <div style="font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px;">Overall</div>
+      <div style="font-size:52px; font-weight:800; font-variant-numeric:tabular-nums; line-height:1;
+                  color:{{ 'var(--green)' if oc == 'green' else ('var(--yellow)' if oc == 'yellow' else 'var(--red)') }};">
+        {{ run.score_overall }}
+      </div>
+      <div style="font-size:14px; color:var(--muted);">out of 100</div>
+    </div>
+
+    <!-- Dimension scores -->
+    <div class="card" style="padding:20px 24px;">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+        {% set dims = [
+          ('Security',           run.score_security),
+          ('Code Quality',       run.score_code_quality),
+          ('Architecture',       run.score_architecture),
+          ('API Design',         run.score_api_design),
+          ('Test Coverage',      run.score_test_coverage),
+          ('Production Ready',   run.score_production_readiness),
+        ] %}
+        {% for label, val in dims %}
+        {% if val is not none %}
+        {% set c = score_color(val) %}
+        <div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px;">
+            <span style="font-size:12px; color:var(--muted);">{{ label }}</span>
+            <span style="font-size:13px; font-weight:600; font-variant-numeric:tabular-nums;
+                         color:{{ 'var(--green)' if c=='green' else ('var(--yellow)' if c=='yellow' else 'var(--red)') }};">{{ val }}</span>
+          </div>
+          <div class="score-bar">
+            <div class="score-fill score-fill-{{ c }}" style="width:{{ val }}%;"></div>
+          </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ── Severity summary ── -->
+  {% if severity_counts %}
+  <div style="display:flex; gap:10px; margin-bottom:24px; flex-wrap:wrap;">
+    {% for sev in severity_order %}
+    {% if severity_counts.get(sev) %}
+    {% set colors = {'CRITICAL': 'badge-red', 'HIGH': 'badge-orange', 'MEDIUM': 'badge-yellow', 'LOW': 'badge-blue', 'INFO': 'badge-gray'} %}
+    <div class="card" style="padding:14px 20px; display:flex; align-items:center; gap:10px;">
+      <span class="badge {{ colors[sev] }}">{{ sev }}</span>
+      <span style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums;">{{ severity_counts[sev] }}</span>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- ── Findings table ── -->
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+    <h2 style="font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0;">
+      Findings ({{ findings|length }})
+    </h2>
+    <!-- Filters -->
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <select class="si-input" style="width:auto; padding:6px 10px; font-size:12px;" x-model="filterSev">
+        <option value="">All Severities</option>
+        <option>CRITICAL</option><option>HIGH</option><option>MEDIUM</option><option>LOW</option><option>INFO</option>
+      </select>
+      <select class="si-input" style="width:auto; padding:6px 10px; font-size:12px;" x-model="filterAgent">
+        <option value="">All Agents</option>
+        {% for ar in agent_runs %}
+        <option value="{{ ar.agent_id }}">{{ ar.agent_id }} – {{ ar.agent_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  {% if not findings %}
+  <div class="card" style="padding:40px 24px; text-align:center; color:var(--muted);">No findings recorded for this scan.</div>
+  {% else %}
+  <div class="card" style="overflow:hidden;">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th style="width:100px;">Severity</th>
+          <th style="width:80px;">Agent</th>
+          <th>Problem</th>
+          <th>Location</th>
+          <th style="width:70px;">Effort</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in findings %}
+        {% set badge_cls = {'CRITICAL': 'badge-red', 'HIGH': 'badge-orange', 'MEDIUM': 'badge-yellow', 'LOW': 'badge-blue', 'INFO': 'badge-gray'} %}
+        <tr x-show="(!filterSev || filterSev === '{{ f.severity }}') && (!filterAgent || filterAgent === '{{ f.agent_id }}')">
+          <td>
+            <span class="badge {{ badge_cls.get(f.severity, 'badge-gray') }}">{{ f.severity }}</span>
+          </td>
+          <td>
+            <span style="font-family:monospace; font-size:12px; color:var(--muted);">{{ f.agent_id }}</span>
+          </td>
+          <td>
+            <div style="font-size:13px; color:var(--text); margin-bottom:3px;">{{ f.problem }}</div>
+            {% if f.impact %}
+            <div style="font-size:12px; color:var(--muted);">{{ f.impact[:120] }}{% if f.impact|length > 120 %}…{% endif %}</div>
+            {% endif %}
+            {% if f.fix_description %}
+            <details style="margin-top:4px;">
+              <summary style="font-size:11px; color:var(--orange); cursor:pointer; user-select:none;">Fix</summary>
+              <div style="margin-top:6px; font-size:12px; color:var(--text);">{{ f.fix_description }}</div>
+              {% if f.fix_code %}
+              <div class="code-block" style="margin-top:6px; font-size:11px;">{{ f.fix_code }}</div>
+              {% endif %}
+            </details>
+            {% endif %}
+          </td>
+          <td style="font-family:monospace; font-size:11px; color:var(--muted); word-break:break-all;">
+            {% if f.file_path %}
+            {{ f.file_path | replace(run.project_path + '/', '') }}{% if f.line_number %}:{{ f.line_number }}{% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td style="text-align:center; color:var(--muted); font-size:12px;">
+            {% if f.effort_hours %}{{ f.effort_hours }}h{% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- ── Agent runs summary ── -->
+  {% if agent_runs %}
+  <div style="margin-top:28px;">
+    <h2 style="font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 12px;">Agent Results</h2>
+    <div class="card" style="overflow:hidden;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Agent</th>
+            <th>Model</th>
+            <th>Status</th>
+            <th>Findings</th>
+            <th>Duration</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ar in agent_runs %}
+          <tr>
+            <td>
+              <span style="font-family:monospace; font-size:12px; color:var(--muted); margin-right:8px;">{{ ar.agent_id }}</span>
+              {{ ar.agent_name }}
+            </td>
+            <td>
+              {% set model_cls = 'badge-green' if 'haiku' in (ar.model or '') else ('badge-blue' if 'sonnet' in (ar.model or '') else 'badge-purple') %}
+              <span class="badge {{ model_cls }}" style="font-size:10px;">
+                {% if 'haiku' in (ar.model or '') %}Haiku
+                {% elif 'sonnet' in (ar.model or '') %}Sonnet
+                {% elif 'opus' in (ar.model or '') %}Opus
+                {% else %}{{ ar.model or '?' }}{% endif %}
+              </span>
+            </td>
+            <td>
+              <span class="badge {{ 'badge-green' if ar.status == 'complete' else ('badge-red' if ar.status == 'failed' else 'badge-gray') }}">
+                {{ ar.status }}
+              </span>
+            </td>
+            <td style="font-variant-numeric:tabular-nums;">{{ ar.findings_count or 0 }}</td>
+            <td style="font-size:12px; color:var(--muted);">
+              {% if ar.started_at and ar.completed_at %}
+                {% set dur = (ar.completed_at - ar.started_at).total_seconds() | int %}
+                {% if dur < 60 %}{{ dur }}s{% else %}{{ dur // 60 }}m {{ dur % 60 }}s{% endif %}
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+function report() {
+  return {
+    filterSev: '',
+    filterAgent: '',
+  };
+}
+</script>
+{% endblock %}

@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+{% block title %}Scanning {{ initial_state.project_name or run_id }} — SpringInsight{% endblock %}
+
+{% block nav_extra %}
+<a href="/scans/{{ run_id }}" class="nav-item active">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+  Live Scan
+</a>
+{% endblock %}
+
+{% block content %}
+<div style="padding:32px 40px; max-width:960px;" x-data="liveScan()" x-init="init()">
+
+  <!-- Header -->
+  <div style="display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:28px;">
+    <div>
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+        <a href="/" style="color:var(--muted); font-size:12px;">Dashboard</a>
+        <span style="color:var(--muted);">›</span>
+        <span style="font-size:12px; color:var(--muted);">{{ initial_state.project_name or run_id }}</span>
+      </div>
+      <h1 style="font-size:20px; font-weight:700; margin:0 0 4px; display:flex; align-items:center; gap:10px;">
+        <span x-text="state.project_name || '{{ initial_state.project_name }}'"></span>
+        <span x-bind:class="statusBadgeClass(state.status)" class="badge" style="font-size:11px;" x-text="statusLabel(state.status)"></span>
+      </h1>
+      <div style="color:var(--muted); font-size:12px; font-family:monospace; word-break:break-all;" x-text="state.repo_url || '{{ initial_state.repo_url }}'"></div>
+    </div>
+
+    <!-- Live stats -->
+    <div style="display:flex; gap:16px; flex-shrink:0;">
+      <div class="card" style="padding:12px 18px; text-align:center; min-width:90px;">
+        <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px;">Findings</div>
+        <div style="font-size:26px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--orange);" x-text="state.findings_count"></div>
+      </div>
+      <div class="card" style="padding:12px 18px; text-align:center; min-width:90px;">
+        <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px;">Progress</div>
+        <div style="font-size:26px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--text);" x-text="progressPct() + '%'"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Progress bar -->
+  <div style="margin-bottom:28px;">
+    <div class="score-bar" style="height:7px;">
+      <div class="score-fill"
+           :class="state.status === 'complete' ? 'score-fill-green' : 'score-fill-yellow'"
+           :style="'width:' + progressPct() + '%'"></div>
+    </div>
+    <div style="display:flex; justify-content:space-between; margin-top:6px; font-size:11px; color:var(--muted);">
+      <span x-text="completedCount() + ' of ' + totalCount() + ' agents done'"></span>
+      <span x-text="elapsedTime()"></span>
+    </div>
+  </div>
+
+  <!-- Agent cards grid -->
+  <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px; margin-bottom:28px;">
+    <template x-for="(status, agentId) in state.agents" :key="agentId">
+      <div class="card" style="padding:16px;" :class="agentCardClass(status)">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="dot" :class="'dot-' + status" style="position:relative;"></div>
+            <span style="font-size:13px; font-weight:600; color:var(--text);" x-text="state.agent_names[agentId] || agentId"></span>
+          </div>
+          <span style="font-size:10px; font-family:monospace; color:var(--muted);" x-text="agentId"></span>
+        </div>
+        <!-- Model badge -->
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span class="badge"
+            :class="modelBadgeClass(state.agent_models && state.agent_models[agentId])"
+            x-text="modelShort(state.agent_models && state.agent_models[agentId])"></span>
+          <span class="badge"
+            :class="statusBadgeClass(status)"
+            x-text="statusLabel(status)"></span>
+        </div>
+        <!-- Finding count for completed agents -->
+        <div x-show="agentFindings[agentId]" style="margin-top:8px; font-size:12px; color:var(--muted);">
+          <span x-text="agentFindings[agentId]"></span> finding<span x-show="agentFindings[agentId] !== 1">s</span>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <!-- Complete panel -->
+  <div x-show="state.status === 'complete'" x-cloak>
+    <div class="card" style="padding:24px; border-color:rgba(34,197,94,.3); background:rgba(34,197,94,.04);">
+      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px;">
+        <div>
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <span style="font-size:16px; font-weight:700; color:var(--green);">Scan Complete</span>
+          </div>
+          <div style="color:var(--muted); font-size:13px;">
+            Found <strong style="color:var(--text);" x-text="state.findings_count"></strong> issues in
+            <strong style="color:var(--text);" x-text="elapsedTime()"></strong>
+          </div>
+        </div>
+
+        <!-- Score pills -->
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <template x-for="(val, key) in state.scores" :key="key">
+            <div class="card" style="padding:10px 14px; text-align:center;" x-show="key !== 'overall'">
+              <div style="font-size:10px; color:var(--muted); text-transform:capitalize; margin-bottom:2px;" x-text="key.replace('_',' ')"></div>
+              <div style="font-size:20px; font-weight:700;" :style="'color:' + scoreColor(val)" x-text="val"></div>
+            </div>
+          </template>
+        </div>
+
+        <a :href="'/scans/{{ run_id }}/report'" class="btn-primary" style="text-decoration:none;">
+          View Full Report →
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Failed panel -->
+  <div x-show="state.status === 'failed'" x-cloak>
+    <div class="card" style="padding:20px 24px; border-color:rgba(239,68,68,.3); background:rgba(239,68,68,.04);">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        <span style="color:var(--red); font-weight:600;">Scan Failed</span>
+      </div>
+      <div style="color:var(--muted); font-size:13px; font-family:monospace;" x-text="state.error"></div>
+    </div>
+  </div>
+
+  <!-- Live event log -->
+  <div style="margin-top:28px;">
+    <h3 style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 10px;">Event Log</h3>
+    <div class="card" style="padding:14px; max-height:240px; overflow-y:auto;" id="event-log">
+      <template x-for="(evt, i) in eventLog" :key="i">
+        <div style="display:flex; align-items:baseline; gap:10px; padding:3px 0; font-size:12px; border-bottom:1px solid var(--border);" x-show="evt.type !== 'heartbeat'">
+          <span style="color:var(--muted); flex-shrink:0; font-family:monospace;" x-text="formatTime(evt.timestamp)"></span>
+          <span :style="eventColor(evt.type)" x-text="formatEvent(evt)"></span>
+        </div>
+      </template>
+      <div x-show="eventLog.length === 0" style="color:var(--muted); font-size:12px;">Waiting for events…</div>
+    </div>
+  </div>
+
+</div>
+
+<style>
+[x-cloak] { display: none !important; }
+.agent-card-running { border-color: rgba(59,130,246,.3) !important; background: rgba(59,130,246,.03) !important; }
+.agent-card-complete { border-color: rgba(34,197,94,.2) !important; }
+.agent-card-failed  { border-color: rgba(239,68,68,.2) !important; }
+</style>
+
+<script>
+const RUN_ID = '{{ run_id }}';
+const INITIAL_STATE = {{ initial_state | tojson }};
+
+function liveScan() {
+  return {
+    state: { ...INITIAL_STATE },
+    eventLog: [],
+    agentFindings: {},
+    startTime: Date.now(),
+    elapsedSecs: 0,
+    _timer: null,
+    _es: null,
+
+    init() {
+      // Start elapsed timer
+      this._timer = setInterval(() => this.elapsedSecs++, 1000);
+
+      // Connect SSE
+      this._es = new EventSource(`/api/runs/${RUN_ID}/stream`);
+      this._es.onmessage = (e) => {
+        try { this.handleEvent(JSON.parse(e.data)); } catch(ex) {}
+      };
+      this._es.onerror = () => {
+        // SSE closed — scan may have finished, reload after short delay
+        this._es.close();
+        if (this.state.status !== 'complete') {
+          setTimeout(() => {
+            fetch(`/api/runs/${RUN_ID}`)
+              .then(r => r.json())
+              .then(d => { if (d.status === 'complete') window.location.href = `/scans/${RUN_ID}/report`; })
+              .catch(() => {});
+          }, 1000);
+        }
+      };
+    },
+
+    handleEvent(evt) {
+      this.eventLog.push(evt);
+      // Auto-scroll log
+      this.$nextTick(() => {
+        const el = document.getElementById('event-log');
+        if (el) el.scrollTop = el.scrollHeight;
+      });
+
+      if (evt.type === 'scan_started') {
+        this.state.status = 'running';
+      } else if (evt.type === 'agent_update') {
+        this.state.agents[evt.agent_id] = evt.status;
+      } else if (evt.type === 'findings_update') {
+        this.agentFindings[evt.agent_id] = evt.count;
+        this.state.findings_count = evt.total;
+      } else if (evt.type === 'run_complete') {
+        this.state.status = 'complete';
+        this.state.findings_count = evt.findings_count;
+        this.state.scores = evt.scores || {};
+        this.state.completed_at = evt.completed_at;
+        clearInterval(this._timer);
+        this._es.close();
+      } else if (evt.type === 'scan_failed') {
+        this.state.status = 'failed';
+        this.state.error = evt.error;
+        clearInterval(this._timer);
+        this._es.close();
+      }
+    },
+
+    progressPct() {
+      const agents = Object.values(this.state.agents || {});
+      if (agents.length === 0) return 0;
+      if (this.state.status === 'complete') return 100;
+      const done = agents.filter(s => s === 'complete' || s === 'failed').length;
+      return Math.round((done / agents.length) * 100);
+    },
+    completedCount() {
+      return Object.values(this.state.agents || {}).filter(s => s === 'complete' || s === 'failed').length;
+    },
+    totalCount() {
+      return Object.keys(this.state.agents || {}).length;
+    },
+    elapsedTime() {
+      const s = this.elapsedSecs;
+      if (s < 60) return s + 's';
+      return Math.floor(s/60) + 'm ' + (s % 60) + 's';
+    },
+
+    statusLabel(s) {
+      return { pending: 'Pending', running: 'Running', complete: 'Complete', failed: 'Failed' }[s] || s;
+    },
+    statusBadgeClass(s) {
+      return { pending: 'badge-gray', running: 'badge-blue', complete: 'badge-green', failed: 'badge-red' }[s] || 'badge-gray';
+    },
+    agentCardClass(s) {
+      return s === 'running' ? 'agent-card-running' : s === 'complete' ? 'agent-card-complete' : s === 'failed' ? 'agent-card-failed' : '';
+    },
+    modelShort(model) {
+      if (!model) return '?';
+      if (model.includes('haiku')) return 'Haiku';
+      if (model.includes('sonnet')) return 'Sonnet';
+      if (model.includes('opus')) return 'Opus';
+      return model.split('-')[1] || model;
+    },
+    modelBadgeClass(model) {
+      if (!model) return 'badge-gray';
+      if (model.includes('haiku')) return 'badge-green';
+      if (model.includes('sonnet')) return 'badge-blue';
+      if (model.includes('opus')) return 'badge-purple';
+      return 'badge-gray';
+    },
+    scoreColor(v) {
+      if (v >= 80) return 'var(--green)';
+      if (v >= 60) return 'var(--yellow)';
+      return 'var(--red)';
+    },
+
+    formatTime(ts) {
+      if (!ts) return '';
+      try { return new Date(ts).toLocaleTimeString('en', {hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
+      catch(e) { return ts.slice(11, 19) || ''; }
+    },
+    formatEvent(evt) {
+      if (evt.type === 'scan_started') return `Scan started — ${evt.agent_count} agent(s) queued`;
+      if (evt.type === 'agent_update') return `[${evt.agent_id}] ${evt.agent_name}: ${evt.status}`;
+      if (evt.type === 'findings_update') return `[${evt.agent_id}] ${evt.count} finding(s) discovered (total: ${evt.total})`;
+      if (evt.type === 'run_complete') return `✓ Scan complete — ${evt.findings_count} finding(s) total`;
+      if (evt.type === 'scan_failed') return `✗ Scan failed: ${evt.error}`;
+      return evt.type;
+    },
+    eventColor(type) {
+      if (type === 'run_complete') return 'color:var(--green)';
+      if (type === 'scan_failed')  return 'color:var(--red)';
+      if (type === 'agent_update') return 'color:var(--text)';
+      return 'color:var(--muted)';
+    },
+  };
+}
+</script>
+{% endblock %}

@@ -1,0 +1,186 @@
+"""Agent registry — metadata for all SpringInsight agents.
+
+Phase 1 agents use Haiku (fast, cheap pattern matching).
+Phase 2+ agents use Sonnet/Opus (deep analysis).
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+
+
+@dataclass
+class AgentMeta:
+    id: str                              # A03, A10, A12
+    name: str                            # human-readable name
+    model: str                           # claude model identifier
+    phase: int                           # 1 | 2 | 3 | 4
+    skill_file: str                      # relative path to SKILL.md within skills/
+    description: str = ""
+    requires: list[str] = field(default_factory=list)  # agent IDs that must complete first
+    enabled: bool = True
+
+
+# ---------------------------------------------------------------------------
+# Full agent registry — all phases defined here.
+# Phase 1 agents are active; Phase 2-4 are defined but not yet implemented.
+# ---------------------------------------------------------------------------
+AGENT_REGISTRY: dict[str, AgentMeta] = {
+
+    # ── Phase 1: Fast Haiku agents ─────────────────────────────────────────
+    "A03": AgentMeta(
+        id="A03",
+        name="CVE & License Scanner",
+        model="claude-haiku-4-5-20251001",
+        phase=1,
+        skill_file="a03-cve-license/SKILL.md",
+        description=(
+            "Scans all pom.xml / build.gradle for dependency versions, "
+            "known CVEs, and license compatibility issues."
+        ),
+    ),
+    "A10": AgentMeta(
+        id="A10",
+        name="Dead Code Detector",
+        model="claude-haiku-4-5-20251001",
+        phase=1,
+        skill_file="a10-dead-code/SKILL.md",
+        description=(
+            "Finds unused Java classes, methods, fields, and imports "
+            "across the project using cross-reference analysis."
+        ),
+    ),
+    "A12": AgentMeta(
+        id="A12",
+        name="Config & Infra Review",
+        model="claude-haiku-4-5-20251001",
+        phase=1,
+        skill_file="a12-config-review/SKILL.md",
+        description=(
+            "Reviews application.properties, YAML, Docker, and CI/CD files "
+            "for security misconfigs and production-readiness gaps."
+        ),
+    ),
+
+    # ── Phase 2: Deep Sonnet agents ────────────────────────────────────────
+    "A01": AgentMeta(
+        id="A01",
+        name="Deep Code Review",
+        model="claude-sonnet-4-6",
+        phase=2,
+        skill_file="a01-code-review/SKILL.md",
+        description="Comprehensive Java code quality review across all modules.",
+    ),
+    "A02": AgentMeta(
+        id="A02",
+        name="Security Scanner",
+        model="claude-sonnet-4-6",
+        phase=2,
+        skill_file="a02-security-scanner/SKILL.md",
+        description="OWASP Top 10 focused security scan.",
+    ),
+    "A04": AgentMeta(
+        id="A04",
+        name="Database & JPA Review",
+        model="claude-sonnet-4-6",
+        phase=2,
+        skill_file="a04-database-review/SKILL.md",
+        description="JPA entities, repositories, native queries, N+1, schema analysis.",
+    ),
+    "A11": AgentMeta(
+        id="A11",
+        name="Performance Analyzer",
+        model="claude-sonnet-4-6",
+        phase=2,
+        skill_file="a11-performance/SKILL.md",
+        description="Caching gaps, N+1, unbounded queries, thread pool sizing.",
+    ),
+    "A13": AgentMeta(
+        id="A13",
+        name="API Design Auditor",
+        model="claude-sonnet-4-6",
+        phase=2,
+        skill_file="a13-api-auditor/SKILL.md",
+        description="REST compliance, OpenAPI coverage, pagination, error shapes.",
+    ),
+    "A14": AgentMeta(
+        id="A14",
+        name="Concurrency & TXN Audit",
+        model="claude-sonnet-4-6",
+        phase=2,
+        skill_file="a14-concurrency/SKILL.md",
+        description="@Transactional correctness, @Async safety, locking patterns.",
+    ),
+
+    # ── Phase 3: Opus + generation agents ──────────────────────────────────
+    "A05": AgentMeta(
+        id="A05",
+        name="Architecture Review",
+        model="claude-opus-4-6",
+        phase=3,
+        skill_file="a05-architecture/SKILL.md",
+        description="SOLID, layering, coupling, microservices fitness, ADR generation.",
+        requires=["A01", "A02", "A04"],
+        enabled=False,
+    ),
+    "A08": AgentMeta(
+        id="A08",
+        name="LLD Generator",
+        model="claude-opus-4-6",
+        phase=3,
+        skill_file="a08-lld/SKILL.md",
+        description="Class diagrams, sequence diagrams, component maps (PlantUML/Mermaid).",
+        enabled=False,
+    ),
+    "A06": AgentMeta(
+        id="A06",
+        name="Test Generator",
+        model="claude-sonnet-4-6",
+        phase=4,
+        skill_file="a06-test-generator/SKILL.md",
+        description="Generates JUnit 5 + Mockito test classes for uncovered critical paths.",
+        requires=["A01", "A02"],
+        enabled=False,
+    ),
+    "A07": AgentMeta(
+        id="A07",
+        name="Feature Documentation",
+        model="claude-sonnet-4-6",
+        phase=4,
+        skill_file="a07-feature-docs/SKILL.md",
+        description="Feature specs, API docs, developer guides, sequence diagrams.",
+        requires=["A08"],
+        enabled=False,
+    ),
+    "A09": AgentMeta(
+        id="A09",
+        name="PR Review",
+        model="claude-sonnet-4-6",
+        phase=2,
+        skill_file="a09-pr-review/SKILL.md",
+        description="Git diff analysis, blast radius, breaking change detection.",
+    ),
+}
+
+# Ordered list for phase-based execution
+PHASE_ORDER = {1: ["A03", "A10", "A12"], 2: ["A01", "A02", "A04", "A09", "A11", "A13", "A14"], 3: ["A05", "A08"], 4: ["A06", "A07"]}
+
+
+def get_agent(agent_id: str) -> AgentMeta | None:
+    return AGENT_REGISTRY.get(agent_id)
+
+
+def get_enabled_agents(requested: list[str] | str = "all") -> list[AgentMeta]:
+    """Return the list of enabled agents to run."""
+    if requested == "all":
+        return [a for a in AGENT_REGISTRY.values() if a.enabled]
+    return [AGENT_REGISTRY[aid] for aid in requested if aid in AGENT_REGISTRY and AGENT_REGISTRY[aid].enabled]
+
+
+def resolve_skill_path(agent: AgentMeta) -> Path:
+    """Resolve the absolute path to the agent's SKILL.md."""
+    # Skills are bundled alongside the package
+    pkg_dir = Path(__file__).parent.parent.parent  # springinsight project root
+    skill_path = pkg_dir / "skills" / agent.skill_file
+    return skill_path
