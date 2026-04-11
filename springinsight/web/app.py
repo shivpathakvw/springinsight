@@ -43,6 +43,7 @@ from ..github.config import (
 )
 from ..github.pr_scanner import verify_token, parse_pr_url, scan_pr as github_scan_pr, start_poller
 from .scanner import ScanState, _active_scans, run_scan_background
+from ..utils.cost_estimator import count_project_files, estimate_scan_cost, select_agents_within_budget
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
@@ -244,13 +245,31 @@ async def settings_agents(request: Request):
 
 @app.post("/api/scan")
 async def api_start_scan(request: Request):
-    """Start a new scan. Accepts JSON: {repo_url, agents?}"""
+    """Start a new scan.
+
+    Accepts JSON:
+      {
+        repo_url: str,
+        agents?: "all" | list[str],
+        budget?: float,          # max USD spend — auto-selects cheapest agents
+        budget_strategy?: "value" | "security" | "phase1",
+        use_scope?: bool,        # agent-specific file filtering (default: true)
+        use_incremental?: bool,  # skip unchanged files (default: true)
+        max_files?: int | null,  # override per-agent file cap
+      }
+    """
     body = await request.json()
     repo_url: str = body.get("repo_url", "").strip()
     if not repo_url:
         return JSONResponse({"error": "repo_url is required"}, status_code=400)
 
     requested_agents: str | list = body.get("agents", "all")
+    budget: float | None = body.get("budget")
+    budget_strategy: str = body.get("budget_strategy", "value")
+    use_scope: bool = body.get("use_scope", True)
+    use_incremental: bool = body.get("use_incremental", True)
+    max_files: int | None = body.get("max_files")
+
     data_dir = request.app.state.data_dir
 
     try:
@@ -274,6 +293,27 @@ async def api_start_scan(request: Request):
 
     if not agents:
         return JSONResponse({"error": "No enabled agents found. Check Settings → Agents."}, status_code=400)
+
+    # Apply budget cap — auto-select cheapest agents that fit
+    estimate_info: dict = {}
+    if budget is not None:
+        try:
+            java_count, cfg_count = count_project_files(project_path)
+            agents, estimate = select_agents_within_budget(
+                agents, budget, java_count, cfg_count, strategy=budget_strategy
+            )
+            if not agents:
+                return JSONResponse(
+                    {"error": f"Budget ${budget:.2f} is too low to run any agents."},
+                    status_code=400,
+                )
+            estimate_info = {
+                "total_usd": estimate.total_usd,
+                "agents_selected": len(agents),
+                "java_files": java_count,
+            }
+        except Exception:
+            pass  # Don't block scan if estimation fails
 
     run_id = uuid.uuid4().hex[:8]
 
@@ -305,17 +345,78 @@ async def api_start_scan(request: Request):
     _active_scans[run_id] = state
 
     asyncio.create_task(
-        run_scan_background(state, ctx, project_path, data_dir, agents)
+        run_scan_background(
+            state, ctx, project_path, data_dir, agents,
+            use_file_scope=use_scope,
+            use_incremental=use_incremental,
+            max_files=max_files,
+        )
     )
 
-    return JSONResponse(
-        {
-            "run_id": run_id,
-            "project_name": ctx.name,
-            "agents": [a.id for a in agents],
-            "redirect": f"/scans/{run_id}",
-        }
-    )
+    response_body = {
+        "run_id": run_id,
+        "project_name": ctx.name,
+        "agents": [a.id for a in agents],
+        "redirect": f"/scans/{run_id}",
+    }
+    if estimate_info:
+        response_body["estimate"] = estimate_info
+
+    return JSONResponse(response_body)
+
+
+@app.post("/api/scan/estimate")
+async def api_scan_estimate(request: Request):
+    """Estimate scan cost for a project without starting a scan.
+
+    Accepts JSON: {repo_url: str, agents?: "all" | list[str]}
+    Returns a per-agent cost breakdown and total.
+    """
+    body = await request.json()
+    repo_url: str = body.get("repo_url", "").strip()
+    if not repo_url:
+        return JSONResponse({"error": "repo_url is required"}, status_code=400)
+
+    requested_agents: str | list = body.get("agents", "all")
+    data_dir = request.app.state.data_dir
+
+    try:
+        project_path, _, _ = resolve_project_path(repo_url, data_dir)
+    except Exception as exc:
+        return JSONResponse({"error": f"Cannot resolve project: {exc}"}, status_code=400)
+
+    agents = get_enabled_agents(requested_agents)
+    agent_config = load_agent_config()
+    if agent_config:
+        agents = [a for a in agents if agent_config.get(a.id, True)]
+
+    if not agents:
+        return JSONResponse({"error": "No enabled agents."}, status_code=400)
+
+    try:
+        java_count, cfg_count = count_project_files(project_path)
+    except Exception:
+        java_count, cfg_count = 0, 5
+
+    estimate = estimate_scan_cost(agents, java_count, cfg_count)
+
+    return JSONResponse({
+        "total_usd": estimate.total_usd,
+        "java_files": java_count,
+        "config_files": cfg_count,
+        "agent_count": estimate.agent_count,
+        "breakdown": estimate.breakdown,
+        "per_agent": [
+            {
+                "id": a.id,
+                "name": a.name,
+                "model": a.model,
+                "phase": a.phase,
+                "cost_usd": estimate.per_agent.get(a.id, 0.0),
+            }
+            for a in agents
+        ],
+    })
 
 
 @app.post("/api/settings/agents")

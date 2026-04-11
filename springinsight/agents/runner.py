@@ -19,6 +19,8 @@ from datetime import datetime
 from pathlib import Path
 
 from ..context.loader import ProjectContext, render_context_block
+from ..utils.file_cache import get_unchanged_files, update_cache
+from ..utils.file_scope import compute_scope
 from .registry import AgentMeta, resolve_skill_path
 
 logger = logging.getLogger(__name__)
@@ -50,6 +52,7 @@ def _build_agent_prompt(
     output_md_path: Path,
     run_id: str,
     extra_scope: str = "",
+    file_scope_block: str = "",
 ) -> str:
     """Assemble the full prompt sent to claude for an agent run."""
     skill_path = resolve_skill_path(agent)
@@ -68,6 +71,7 @@ Project Path   : {project_path}
 Output JSON    : {output_json_path}
 Output Report  : {output_md_path}
 {extra_scope}
+{file_scope_block}
 === BEGIN ANALYSIS ===
 Execute the full analysis now following ALL instructions in the SKILL.md above.
 Do NOT skip any steps. Write your complete findings to the paths specified above.
@@ -94,6 +98,9 @@ async def run_agent_async(
     extra_scope: str = "",
     timeout: int = AGENT_TIMEOUT,
     log_callback=None,   # log_callback(agent_id, message: str)
+    use_file_scope: bool = True,   # enable agent-specific file filtering
+    use_incremental: bool = True,  # skip unchanged files via FileCache
+    max_files: int | None = None,  # override per-agent file cap
 ) -> dict:
     """Run a single agent asynchronously. Returns execution metadata."""
     raw_dir = run_dir / "raw"
@@ -104,17 +111,8 @@ async def run_agent_async(
     output_json = raw_dir / f"{agent.id}-findings.json"
     output_md = md_dir / f"{agent.id}-{agent.name.lower().replace(' ', '-')}.md"
 
-    prompt = _build_agent_prompt(
-        agent=agent,
-        ctx=ctx,
-        project_path=project_path,
-        output_json_path=output_json,
-        output_md_path=output_md,
-        run_id=run_id,
-        extra_scope=extra_scope,
-    )
-
     started_at = datetime.utcnow()
+    project_path_obj = Path(project_path)
 
     def _log(msg: str) -> None:
         logger.info("[%s] %s", agent.id, msg)
@@ -135,7 +133,41 @@ async def run_agent_async(
         }
 
     java_files = _count_java_files(project_path)
-    _log(f"Found {java_files} Java source files to analyze")
+    _log(f"Found {java_files} Java source files")
+
+    # ── Compute file scope (agent-specific filtering + incremental cache) ──
+    file_scope_block = ""
+    scope_obj = None
+    if use_file_scope:
+        try:
+            skip_files: set[str] = set()
+            if use_incremental:
+                skip_files = get_unchanged_files(project_path_obj, agent.id)
+                if skip_files:
+                    _log(f"Incremental: {len(skip_files)} unchanged file(s) will be skipped")
+
+            scope_obj = compute_scope(
+                agent_id=agent.id,
+                project_path=project_path_obj,
+                max_files=max_files,
+                skip_files=skip_files,
+            )
+            file_scope_block = scope_obj.to_prompt_block(project_path)
+            _log(f"Scope: {scope_obj.savings_summary()}")
+        except Exception as exc:
+            logger.warning("[%s] Scope computation failed: %s", agent.id, exc)
+            file_scope_block = ""
+
+    prompt = _build_agent_prompt(
+        agent=agent,
+        ctx=ctx,
+        project_path=project_path,
+        output_json_path=output_json,
+        output_md_path=output_md,
+        run_id=run_id,
+        extra_scope=extra_scope,
+        file_scope_block=file_scope_block,
+    )
 
     try:
         process = await asyncio.create_subprocess_exec(
@@ -230,6 +262,18 @@ async def run_agent_async(
             + (f" [{crit} CRITICAL, {high} HIGH, {med} MEDIUM]" if findings else "")
         )
 
+        # ── Update file hash cache after successful run ──────────────────
+        if use_incremental and use_file_scope:
+            try:
+                all_java = list(project_path_obj.rglob("*.java"))
+                saved = update_cache(project_path_obj, all_java, run_id)
+                if saved:
+                    logger.debug("[%s] FileCache updated: %d entries", agent.id, saved)
+            except Exception as exc:
+                logger.debug("[%s] FileCache update failed: %s", agent.id, exc)
+
+        scope_savings = scope_obj.savings_summary() if scope_obj else "scope disabled"
+
         return {
             "agent_id": agent.id,
             "status": "complete",
@@ -240,6 +284,7 @@ async def run_agent_async(
             "output_md": str(output_md) if output_md.exists() else None,
             "findings": findings,
             "java_files": java_files,
+            "scope_savings": scope_savings,
             "stdout_preview": stdout.decode(errors="replace")[:500],
         }
 
@@ -268,11 +313,17 @@ async def run_agents_parallel(
     parallelism: int = 6,
     progress_callback=None,
     log_callback=None,
+    use_file_scope: bool = True,
+    use_incremental: bool = True,
+    max_files: int | None = None,
 ) -> list[dict]:
     """Run multiple agents with bounded parallelism.
 
     progress_callback(agent_id, status) is called on start + completion.
     log_callback(agent_id, message)    is called for verbose log lines.
+    use_file_scope: inject agent-specific file lists (reduces tokens).
+    use_incremental: skip unchanged files via FileCache.
+    max_files: override per-agent file cap (None = use defaults).
     """
     semaphore = asyncio.Semaphore(parallelism)
 
@@ -283,6 +334,9 @@ async def run_agents_parallel(
             result = await run_agent_async(
                 agent, ctx, project_path, run_dir, run_id,
                 log_callback=log_callback,
+                use_file_scope=use_file_scope,
+                use_incremental=use_incremental,
+                max_files=max_files,
             )
             if progress_callback:
                 progress_callback(agent.id, result["status"])

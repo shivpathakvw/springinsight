@@ -13,6 +13,7 @@
 
   <!-- ── Scan input card ── -->
   <div class="card" style="padding:24px; margin-bottom:32px;">
+    <!-- Repo URL row -->
     <div style="display:flex; gap:12px; align-items:flex-end;">
       <div style="flex:1;">
         <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:8px;">
@@ -24,6 +25,7 @@
           placeholder="https://github.com/owner/my-spring-app  or  /Users/me/projects/api-service"
           class="si-input"
           @keydown.enter="startScan()"
+          @blur="repoUrl.trim() && estimateCost()"
           :disabled="scanning"
         >
       </div>
@@ -37,6 +39,54 @@
           Starting…
         </span>
       </button>
+    </div>
+
+    <!-- Cost estimate banner -->
+    <div x-show="estimate && !scanning" x-cloak style="margin-top:14px; padding:12px 16px; background:rgba(249,115,22,.07); border:1px solid rgba(249,115,22,.2); border-radius:8px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span style="font-size:12px; color:var(--text);">
+          Estimated cost: <strong x-text="'$' + (estimate.total_usd || 0).toFixed(3)" style="color:#f97316;"></strong>
+          &nbsp;·&nbsp; <span x-text="estimate.java_files || 0"></span> Java files
+          &nbsp;·&nbsp; <span x-text="(estimate.agent_count || 0) + ' agents'"></span>
+          <span x-show="estimate.breakdown" x-cloak style="color:var(--muted);">&nbsp;(<span x-text="estimate.breakdown"></span>)</span>
+        </span>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <label style="font-size:11px; color:var(--muted); white-space:nowrap;">Budget cap (USD):</label>
+        <input x-model.number="budget" type="number" min="0.01" step="0.10" placeholder="no limit"
+               style="width:90px; padding:4px 8px; background:var(--surface); border:1px solid var(--border); border-radius:5px; color:var(--text); font-size:12px;"
+               :disabled="scanning">
+      </div>
+    </div>
+
+    <!-- Advanced options (collapsible) -->
+    <div style="margin-top:12px;">
+      <button @click="showAdvanced = !showAdvanced" style="background:none; border:none; cursor:pointer; color:var(--muted); font-size:11px; display:flex; align-items:center; gap:5px; padding:0;">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+             :style="showAdvanced ? 'transform:rotate(90deg);transition:transform 0.15s' : 'transition:transform 0.15s'">
+          <polyline points="9,18 15,12 9,6"/>
+        </svg>
+        Advanced options
+      </button>
+      <div x-show="showAdvanced" x-cloak style="margin-top:10px; padding:14px 16px; background:var(--surface-1); border:1px solid var(--border); border-radius:8px; display:flex; gap:24px; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; color:var(--text);">
+          <input type="checkbox" x-model="useScope" style="accent-color:#f97316;">
+          Smart file scoping <span style="color:var(--muted); font-size:11px;">(skip irrelevant files per agent)</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; color:var(--text);">
+          <input type="checkbox" x-model="useIncremental" style="accent-color:#f97316;">
+          Incremental scanning <span style="color:var(--muted); font-size:11px;">(skip unchanged files since last scan)</span>
+        </label>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <label style="font-size:12px; color:var(--text); white-space:nowrap;">Budget strategy:</label>
+          <select x-model="budgetStrategy" style="background:var(--surface); border:1px solid var(--border); border-radius:5px; color:var(--text); font-size:12px; padding:4px 8px;">
+            <option value="value">Value (phase order)</option>
+            <option value="security">Security first</option>
+            <option value="phase1">Phase 1 only</option>
+          </select>
+        </div>
+      </div>
     </div>
 
     <!-- Error state -->
@@ -211,6 +261,34 @@ function dashboard() {
     repoUrl: '',
     scanning: false,
     error: '',
+    estimate: null,
+    estimating: false,
+    budget: null,
+    budgetStrategy: 'value',
+    useScope: true,
+    useIncremental: true,
+    showAdvanced: false,
+    _estimateTimer: null,
+
+    async estimateCost() {
+      const url = this.repoUrl.trim();
+      if (!url) { this.estimate = null; return; }
+      this.estimating = true;
+      try {
+        const res = await fetch('/api/scan/estimate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ repo_url: url }),
+        });
+        if (res.ok) {
+          this.estimate = await res.json();
+        }
+      } catch (e) {
+        // silently ignore estimate failures
+      } finally {
+        this.estimating = false;
+      }
+    },
 
     async startScan() {
       const url = this.repoUrl.trim();
@@ -218,10 +296,19 @@ function dashboard() {
       this.error = '';
       this.scanning = true;
       try {
+        const payload = {
+          repo_url: url,
+          use_scope: this.useScope,
+          use_incremental: this.useIncremental,
+          budget_strategy: this.budgetStrategy,
+        };
+        if (this.budget && this.budget > 0) {
+          payload.budget = parseFloat(this.budget);
+        }
         const res = await fetch('/api/scan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ repo_url: url }),
+          body: JSON.stringify(payload),
         });
         const data = await res.json();
         if (!res.ok || data.error) {

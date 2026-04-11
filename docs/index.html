@@ -1022,15 +1022,38 @@ npm install &amp;&amp; npm run compile
     </div>
 
     <!-- Cost control callout -->
-    <div class="card" style="padding:1.5rem;border-color:rgba(234,179,8,.2);background:rgba(234,179,8,.04);display:flex;align-items:flex-start;gap:1rem;margin-top:1rem;margin-bottom:1rem">
-      <div style="font-size:1.5rem;flex-shrink:0">💡</div>
-      <div>
-        <div style="font-weight:700;margin-bottom:.3rem">Control cost with Agent Config</div>
-        <p style="font-size:.875rem;color:var(--text-mid)">
-          Running all 15 agents costs $3–8 per large project. For quick checks, enable only Phase 1 agents (Haiku, ~$0.05 total).
-          Disable expensive Opus agents (A05 Architecture, A08 LLD) unless you need deep architecture analysis.
-          Use the <strong style="color:var(--text)">Settings → Agents</strong> page in the Web UI, or CLI: <code>springinsight agents</code>.
+    <div class="card" style="padding:1.5rem;border-color:rgba(249,115,22,.25);background:rgba(249,115,22,.05);display:flex;align-items:flex-start;gap:1rem;margin-top:1rem;margin-bottom:1rem">
+      <div style="font-size:1.5rem;flex-shrink:0">💰</div>
+      <div style="flex:1">
+        <div style="font-weight:700;margin-bottom:.3rem">Smart Cost Control — estimate, cap, and optimise</div>
+        <p style="font-size:.875rem;color:var(--text-mid);margin-bottom:.75rem">
+          SpringInsight has a built-in cost engine. Preview spend before committing, set a hard budget cap, and let it
+          auto-select the most valuable agents within your limit. Agent-specific file scoping cuts token usage by 30–70% —
+          the CVE scanner only reads <code>pom.xml</code>, the JPA reviewer only reads <code>@Entity</code> classes.
+          Incremental scanning skips unchanged files on repeat runs, cutting cost by <strong style="color:var(--text)">80–90%</strong> on CI workflows.
         </p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.75rem;margin-bottom:.75rem">
+          <div style="background:rgba(0,0,0,.15);border-radius:6px;padding:.75rem;font-size:.8rem">
+            <div style="color:var(--text);font-weight:600;margin-bottom:.3rem">📊 Pre-scan estimate</div>
+            <div style="color:var(--text-mid)">See per-agent costs before running. Web UI shows estimate as you type.</div>
+          </div>
+          <div style="background:rgba(0,0,0,.15);border-radius:6px;padding:.75rem;font-size:.8rem">
+            <div style="color:var(--text);font-weight:600;margin-bottom:.3rem">🎯 Budget cap</div>
+            <div style="color:var(--text-mid)">Set <code>--budget $1.00</code> and agents are auto-selected to fit.</div>
+          </div>
+          <div style="background:rgba(0,0,0,.15);border-radius:6px;padding:.75rem;font-size:.8rem">
+            <div style="color:var(--text);font-weight:600;margin-bottom:.3rem">⚡ Incremental scans</div>
+            <div style="color:var(--text-mid)">Hash-based cache skips unchanged files. Second scan costs ~10% of first.</div>
+          </div>
+        </div>
+        <pre style="font-size:.75rem;margin:0"><code># Preview cost before running
+springinsight run /path/to/project --estimate
+
+# Cap spend at $2 — cheapest agents selected first
+springinsight run /path/to/project --budget 2.00
+
+# Security-priority within budget
+springinsight run /path/to/project --budget 1.00 --budget-strategy security</code></pre>
       </div>
     </div>
 
@@ -1086,7 +1109,8 @@ springinsight github scan-pr https://github.com/org/repo/pull/42</code></pre>
         <ul class="price-features">
           <li>All 15 agents across 4 phases</li>
           <li>CLI + Web UI + MCP Server + VS Code extension</li>
-          <li>Agent enable/disable for cost control</li>
+          <li>Agent enable/disable, budget cap, pre-scan cost estimate</li>
+          <li>Smart file scoping + incremental scanning (80–90% token savings on re-scans)</li>
           <li>Project Context — custom rules injected into every agent</li>
           <li>PDF export of full scan reports</li>
           <li>GitHub PR auto-scanning + PR comments</li>

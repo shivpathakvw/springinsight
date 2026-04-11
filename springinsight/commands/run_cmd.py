@@ -84,7 +84,28 @@ def _build_progress_table(agent_states: dict[str, dict]) -> Table:
 @click.option("--phase", default=None, type=int, help="Run only agents from a specific phase (1-4)")
 @click.option("--parallel", default=None, type=int, help="Max concurrent agents (overrides context.yaml)")
 @click.option("--no-db", is_flag=True, help="Skip saving findings to SQLite (print only)")
-def run_cmd(target: str | None, work_dir: str, project: str | None, agents: str, phase: int | None, parallel: int | None, no_db: bool):
+# ── Cost / token optimisation flags ─────────────────────────────────────────
+@click.option("--budget", "-B", default=None, type=float, metavar="USD",
+              help="Dollar budget cap — auto-select agents that fit (e.g. --budget 0.50).")
+@click.option("--budget-strategy", default="value",
+              type=click.Choice(["value", "security", "phase1"]),
+              help="How to pick agents within budget: value (phase order), security, phase1.")
+@click.option("--estimate", is_flag=True,
+              help="Print cost estimate for the planned scan and exit without running.")
+@click.option("--no-scope", is_flag=True,
+              help="Disable agent-specific file filtering (send all files to every agent).")
+@click.option("--no-incremental", is_flag=True,
+              help="Disable incremental scanning — re-analyse all files even if unchanged.")
+@click.option("--max-files", default=None, type=int, metavar="N",
+              help="Override max Java files per agent (default: per-agent limits apply).")
+@click.option("--clear-cache", is_flag=True,
+              help="Clear the incremental scan file cache before running.")
+def run_cmd(
+    target: str | None, work_dir: str, project: str | None,
+    agents: str, phase: int | None, parallel: int | None, no_db: bool,
+    budget: float | None, budget_strategy: str, estimate: bool,
+    no_scope: bool, no_incremental: bool, max_files: int | None, clear_cache: bool,
+):
     """Run SpringInsight agents against a Spring Boot project.
 
     TARGET can be a local path or a GitHub URL (positional or --project flag).
@@ -93,10 +114,11 @@ def run_cmd(target: str | None, work_dir: str, project: str | None, agents: str,
     Examples:\n
       springinsight run\n
       springinsight run /path/to/service\n
-      springinsight run https://github.com/org/repo\n
-      springinsight run https://github.com/org/repo --agents A03,A10,A12\n
+      springinsight run ./my-app --budget 0.50\n
+      springinsight run ./my-app --estimate\n
+      springinsight run ./my-app --agents A03,A10,A12\n
       springinsight run --phase 1\n
-      springinsight run --project https://github.com/org/repo
+      springinsight run ./my-app --no-incremental   # force full re-scan
     """
     # Positional argument takes precedence over --project flag
     project = target or project
@@ -135,6 +157,61 @@ def run_cmd(target: str | None, work_dir: str, project: str | None, agents: str,
         console.print("[yellow]No enabled agents found for the requested selection.[/yellow]")
         console.print("Available agents: A03, A10, A12 (Phase 1) — A01, A02, A04, A09, A11, A13, A14 (Phase 2)")
         raise click.Abort()
+
+    # ── Cost estimation and budget enforcement ──────────────────────────────
+    from ..utils.cost_estimator import (
+        count_project_files, estimate_scan_cost, select_agents_within_budget
+    )
+    java_count, cfg_count = count_project_files(project_path)
+
+    cost_estimate = estimate_scan_cost(agents_to_run, java_count, cfg_count)
+
+    if budget is not None:
+        if cost_estimate.total_usd > budget:
+            console.print(
+                f"[yellow]⚡ Budget mode:[/yellow] estimated ${cost_estimate.total_usd:.2f} "
+                f"exceeds --budget ${budget:.2f}. Selecting best agents that fit…"
+            )
+            agents_to_run, cost_estimate = select_agents_within_budget(
+                agents_to_run, budget, java_count, cfg_count, budget_strategy
+            )
+            if not agents_to_run:
+                console.print(f"[red]No agents fit within ${budget:.2f} budget.[/red]")
+                console.print(f"[dim]Phase 1 only costs ~$0.05. Try: --budget 0.10[/dim]")
+                raise click.Abort()
+            console.print(
+                f"[green]Selected {len(agents_to_run)} agent(s): "
+                f"{', '.join(a.id for a in agents_to_run)} "
+                f"(est. ${cost_estimate.total_usd:.3f})[/green]"
+            )
+
+    # Show cost estimate if --estimate flag set
+    if estimate:
+        console.print(f"\n[bold yellow]Cost Estimate[/bold yellow]")
+        console.print(f"  Project    : {project_path.name}")
+        console.print(f"  Java files : {java_count}")
+        console.print(f"  Agents     : {len(agents_to_run)}")
+        console.print()
+        console.print(cost_estimate.format_table())
+        console.print()
+        console.print(f"  Breakdown  : {cost_estimate.breakdown}")
+        console.print()
+        console.print("[dim]These are estimates. Actual cost depends on file complexity and findings count.[/dim]")
+        console.print("[dim]Use --budget 0.50 to auto-select agents within a dollar cap.[/dim]")
+        return  # exit without running
+
+    # Show estimate header (non-blocking)
+    console.print(
+        f"[dim]Est. cost: ${cost_estimate.total_usd:.2f} "
+        f"({java_count} Java files, {len(agents_to_run)} agents) — "
+        f"use --estimate for breakdown[/dim]"
+    )
+
+    # ── Clear file cache if requested ───────────────────────────────────────
+    if clear_cache:
+        from ..utils.file_cache import invalidate_cache
+        n = invalidate_cache(project_path)
+        console.print(f"[dim]File cache cleared ({n} entries)[/dim]")
 
     # ── Init DB ─────────────────────────────────────────────────────────────
     if not no_db:
@@ -200,6 +277,9 @@ def run_cmd(target: str | None, work_dir: str, project: str | None, agents: str,
                 run_id=full_run_id,
                 parallelism=parallelism,
                 progress_callback=progress_cb,
+                use_file_scope=not no_scope,
+                use_incremental=not no_incremental,
+                max_files=max_files,
             )
             return results
 

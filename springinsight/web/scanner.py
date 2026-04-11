@@ -132,6 +132,9 @@ async def run_scan_background(
     project_path: Path,
     work_dir: Path,
     agents: list[AgentMeta],
+    use_file_scope: bool = True,
+    use_incremental: bool = True,
+    max_files: int | None = None,
 ) -> None:
     """Coroutine launched as a background asyncio task."""
     state.status = "running"
@@ -201,6 +204,9 @@ async def run_scan_background(
             parallelism=3,
             progress_callback=_on_progress,
             log_callback=_on_log,
+            use_file_scope=use_file_scope,
+            use_incremental=use_incremental,
+            max_files=max_files,
         )
     except Exception as exc:
         logger.exception("Scan %s crashed: %s", state.run_id, exc)

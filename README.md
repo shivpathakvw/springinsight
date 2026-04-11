@@ -293,18 +293,99 @@ Features: scan from command palette, findings in Problems panel, inline gutter i
 
 ---
 
-## Cost Management
+## Cost Management & Token Optimization
 
-Running all 15 agents on a large project can cost $3–8. Use these strategies:
+SpringInsight includes a comprehensive cost control system so you never get a surprise bill.
 
-| Strategy | Command | Cost |
-|----------|---------|------|
-| Quick check (Phase 1 only) | `--agents A03,A10,A12` | ~$0.05 |
-| Security focus | `--agents A02,A03,A12` | ~$0.30 |
-| Full analysis | (default) | $1–8 |
-| Disable Opus agents | Settings → Agents → disable A05, A08 | saves ~$2 |
+### Pre-scan Cost Estimation
 
-In the Web UI: **Settings → Agents** shows estimated cost per agent before scanning.
+Preview the estimated cost before committing to a scan:
+
+```bash
+# Print cost table and exit — no scan is run
+springinsight run /path/to/project --estimate
+
+# Example output:
+#   Agent                            Model       Est. Cost
+#   ──────────────────────────────────────────────────────
+#   A05 Architecture Review          Opus          $1.250
+#   A08 LLD Generator                Opus          $1.100
+#   A01 Deep Code Review             Sonnet        $0.380
+#   A02 Security Scanner             Sonnet        $0.320
+#   ...
+#   ──────────────────────────────────────────────────────
+#   TOTAL                                          $4.870
+```
+
+In the **Web UI**: enter a repo URL and tab out of the field — a cost estimate appears instantly above the Start Scan button.
+
+### Budget Cap
+
+Cap spend and let SpringInsight auto-select the most valuable agents that fit:
+
+```bash
+# Run only agents that fit within $1.00
+springinsight run /path/to/project --budget 1.00
+
+# Prioritise security agents first
+springinsight run /path/to/project --budget 2.00 --budget-strategy security
+
+# Phase 1 only (Haiku agents, cheapest)
+springinsight run /path/to/project --budget 0.50 --budget-strategy phase1
+```
+
+**Budget strategies:**
+
+| Strategy | Description | Best for |
+|----------|-------------|----------|
+| `value` (default) | Phase order — most signal per dollar | General use |
+| `security` | A02/A03/A12 first | Security audits |
+| `phase1` | Haiku-only Phase 1 agents | Quick CI checks |
+
+### Agent-Specific File Scoping
+
+Each agent only reads files it actually needs, reducing token usage by 30–70%:
+
+| Agent | Optimization | Typical saving |
+|-------|-------------|----------------|
+| A03 CVE Scanner | Reads only `pom.xml` / `build.gradle` — skips all `.java` | ~60% |
+| A12 Config Review | Reads only config/infra files — skips all `.java` | ~60% |
+| A04 DB & JPA | Reads only `@Entity`, `@Repository` classes | ~70% |
+| A13 API Auditor | Reads only `@RestController` classes | ~65% |
+| A02 Security | Skips test classes | ~30% |
+| A14 Concurrency | Reads only `@Service`, `@Async` classes | ~50% |
+
+File scoping is **on by default**. Disable only if you need full-scope analysis:
+
+```bash
+springinsight run /path/to/project --no-scope
+```
+
+### Incremental Scanning
+
+After the first scan, subsequent scans skip files whose SHA-256 hash hasn't changed. On CI/PR workflows where only a handful of files change per commit, this can reduce token usage by **80–90%**.
+
+```bash
+# Incremental is on by default — second scan is dramatically cheaper
+springinsight run /path/to/project
+
+# Force a full re-scan (ignore cache)
+springinsight run /path/to/project --no-incremental
+
+# Manually clear the cache for a project
+springinsight run /path/to/project --clear-cache
+```
+
+### Cost Table by Project Size
+
+| Project size | Phase 1 only | Full scan (all agents) |
+|-------------|--------------|------------------------|
+| Small (50 files) | ~$0.02 | ~$0.80 |
+| Medium (200 files) | ~$0.08 | ~$3.00 |
+| Large (500 files) | ~$0.18 | ~$6.50 |
+| With incremental (2nd scan) | ~$0.005 | ~$0.30 |
+
+In the Web UI: **Settings → Agents** shows estimated cost per agent. The scan form shows a live cost estimate and lets you set a budget cap before starting.
 
 ---
 
@@ -367,6 +448,13 @@ Run `springinsight agents` to see status and enable/disable each agent.
 springinsight run        Scan a project (positional arg or --project)
   --agents A03,A10,A12   Run only specific agents
   --phase 1              Run only a specific phase
+  --estimate             Print cost estimate table and exit (no scan)
+  --budget 1.50          Cap spend — auto-selects cheapest agents that fit
+  --budget-strategy      value | security | phase1  (default: value)
+  --no-scope             Disable agent-specific file filtering
+  --no-incremental       Disable incremental scanning (force full re-scan)
+  --clear-cache          Clear file hash cache before scanning
+  --max-files 100        Override per-agent file cap
 
 springinsight web        Start the Web UI
   --verbose / -v         Stream agent logs to terminal
