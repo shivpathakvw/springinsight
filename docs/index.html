@@ -3,15 +3,121 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SpringInsight — Autonomous Code Intelligence for Spring Boot</title>
-  <meta name="description" content="Scan any Spring Boot codebase in seconds. 17 AI agents find CVEs, security holes, N+1 queries, race conditions, dead code, NFR bottlenecks and upgrade blockers — powered by Claude." />
-  <meta name="author" content="Shiv Chandra Pathak" />
-  <meta property="og:title" content="SpringInsight — Autonomous Code Intelligence for Spring Boot" />
-  <meta property="og:description" content="17 AI agents. Spring Boot 2.7–4.0. Large project batch scanning. Find critical issues in any Spring Boot repo in under 60 seconds." />
+
+  <!-- ── Primary SEO ─────────────────────────────────────────────────────── -->
+  <title>SpringInsight — AI Code Review for Spring Boot | 17 Agents, Free &amp; Open Source</title>
+  <meta name="description" content="SpringInsight scans any Spring Boot codebase in under 60 seconds. 17 AI agents detect CVEs, OWASP vulnerabilities, N+1 queries, race conditions, dead code, NFR bottlenecks and Spring Boot 3.x/4.0 upgrade blockers. Free, open-source, runs locally." />
+  <meta name="keywords" content="spring boot code review, spring boot security scanner, spring boot ai, java static analysis, N+1 query detector, spring boot upgrade advisor, OWASP spring boot, java code quality, spring boot 4.0 migration, AI code review java" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://springinsight.dev/" />
+  <link rel="sitemap" type="application/xml" title="Sitemap" href="/sitemap.xml" />
+
+  <!-- ── Open Graph (Facebook / LinkedIn) ───────────────────────────────── -->
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://springinsight.vercel.app" />
+  <meta property="og:url" content="https://springinsight.dev/" />
+  <meta property="og:site_name" content="SpringInsight" />
+  <meta property="og:title" content="SpringInsight — AI Code Review for Spring Boot" />
+  <meta property="og:description" content="17 AI agents find CVEs, security holes, N+1 queries, race conditions and upgrade blockers in any Spring Boot repo — in under 60 seconds. Free &amp; open-source." />
+  <meta property="og:image" content="https://springinsight.dev/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="SpringInsight terminal showing 17 AI agents scanning a Spring Boot codebase" />
+  <meta property="og:locale" content="en_US" />
+
+  <!-- ── Twitter Card ────────────────────────────────────────────────────── -->
   <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="SpringInsight — AI Code Review for Spring Boot" />
+  <meta name="twitter:description" content="17 AI agents. Spring Boot 2.7–4.0. Free &amp; open-source. Find critical issues in any Spring Boot repo in under 60 seconds." />
+  <meta name="twitter:image" content="https://springinsight.dev/og-image.png" />
+  <meta name="twitter:image:alt" content="SpringInsight — AI-powered Spring Boot code analysis" />
+
+  <!-- ── Performance Hints ──────────────────────────────────────────────── -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="dns-prefetch" href="https://github.com" />
+  <link rel="dns-prefetch" href="https://pypi.org" />
+
+  <!-- ── Favicon ─────────────────────────────────────────────────────────── -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍃</text></svg>" />
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍃</text></svg>" />
+
+  <!-- ── Structured Data (JSON-LD) ──────────────────────────────────────── -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://springinsight.dev/#app",
+        "name": "SpringInsight",
+        "url": "https://springinsight.dev/",
+        "description": "AI-powered code review tool for Spring Boot. 17 specialized agents detect security vulnerabilities, performance issues, and upgrade blockers in seconds.",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Linux, macOS, Windows",
+        "softwareVersion": "0.5.0",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "downloadUrl": "https://pypi.org/project/springinsight/",
+        "codeRepository": "https://github.com/shivpathakvw/springinsight",
+        "license": "https://opensource.org/licenses/MIT",
+        "programmingLanguage": ["Python", "Java"],
+        "keywords": "Spring Boot, code review, AI, security scanner, Java, static analysis"
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://springinsight.dev/#website",
+        "url": "https://springinsight.dev/",
+        "name": "SpringInsight",
+        "description": "Autonomous AI code intelligence for Spring Boot applications",
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": "https://github.com/shivpathakvw/springinsight/search?q={search_term_string}",
+          "query-input": "required name=search_term_string"
+        }
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is SpringInsight?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "SpringInsight is a free, open-source AI code review tool for Spring Boot. It runs 17 specialized agents that detect CVEs, security vulnerabilities, N+1 queries, race conditions, dead code, and Spring Boot upgrade blockers — all in under 60 seconds."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Is SpringInsight free to use?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. SpringInsight is fully open-source (MIT license) and free forever. It runs on your own machine — your code never leaves your infrastructure."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Does SpringInsight support Spring Boot 4.0?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. SpringInsight auto-detects your Spring Boot version from pom.xml or build.gradle and provides version-specific analysis, including migration guidance from 3.0 through 4.0."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "How does SpringInsight handle large codebases?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "SpringInsight automatically detects projects over 1,000 Java files and splits them into intelligent batches with parallel scanning, displaying live progress across all batches."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
 
   <style>
     /* ── Reset & Base ─────────────────────────────────────────────────────── */
@@ -34,6 +140,18 @@
       --mono:      'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
     }
     html { scroll-behavior: smooth; }
+    .skip-link {
+      position: absolute;
+      top: -100%;
+      left: 0;
+      background: var(--green);
+      color: #000;
+      padding: 0.5rem 1rem;
+      font-weight: 700;
+      z-index: 9999;
+      border-radius: 0 0 6px 0;
+    }
+    .skip-link:focus { top: 0; }
     body {
       background: var(--bg);
       color: var(--text);
@@ -469,24 +587,29 @@
 </head>
 <body>
 
+<!-- ── Skip Link (accessibility + SEO) ───────────────────────────────────── -->
+<a href="#main-content" class="skip-link">Skip to main content</a>
+
 <!-- ── NAV ──────────────────────────────────────────────────────────────── -->
-<nav>
+<nav aria-label="Main navigation">
   <div class="container nav-inner">
-    <a class="nav-logo" href="#" style="text-decoration:none">🍃 Spring<span>Insight</span></a>
+    <a class="nav-logo" href="#" style="text-decoration:none" aria-label="SpringInsight home">🍃 Spring<span>Insight</span></a>
     <div class="nav-links">
       <a href="#agents">Agents</a>
       <a href="#layers">Intelligence</a>
       <a href="#how">How It Works</a>
       <a href="#compare">Compare</a>
       <a href="#access">Get Access</a>
-      <a href="https://github.com/shivpathakvw/springinsight" target="_blank">GitHub</a>
+      <a href="https://github.com/shivpathakvw/springinsight" target="_blank" rel="noopener noreferrer">GitHub</a>
       <a class="nav-cta" href="#access">Install Free →</a>
     </div>
   </div>
 </nav>
 
+<main id="main-content">
+
 <!-- ── HERO ─────────────────────────────────────────────────────────────── -->
-<section class="hero">
+<section class="hero" aria-label="Hero — SpringInsight introduction">
   <div class="container">
     <div class="hero-eyebrow">
       <span>✦</span>
@@ -1232,17 +1355,21 @@ springinsight findings --format json</code></pre>
   </div>
 </section>
 
+</main><!-- /#main-content -->
+
 <!-- ── FOOTER ─────────────────────────────────────────────────────────────── -->
-<footer>
+<footer aria-label="Site footer">
   <div class="container footer-inner">
     <span>🍃 SpringInsight · MIT License</span>
-    <div class="footer-links">
-      <a href="https://github.com/shivpathakvw/springinsight" target="_blank">GitHub</a>
-      <a href="https://pypi.org/project/springinsight/" target="_blank">PyPI</a>
-      <a href="https://github.com/shivpathakvw/springinsight#readme" target="_blank">Docs</a>
-      <a href="https://github.com/shivpathakvw/springinsight/issues" target="_blank">Issues</a>
-      <a href="https://github.com/shivpathakvw/springinsight/blob/main/CONTRIBUTING.md" target="_blank">Contribute</a>
-    </div>
+    <nav aria-label="Footer navigation">
+      <div class="footer-links">
+        <a href="https://github.com/shivpathakvw/springinsight" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://pypi.org/project/springinsight/" target="_blank" rel="noopener noreferrer">PyPI</a>
+        <a href="https://github.com/shivpathakvw/springinsight#readme" target="_blank" rel="noopener noreferrer">Docs</a>
+        <a href="https://github.com/shivpathakvw/springinsight/issues" target="_blank" rel="noopener noreferrer">Issues</a>
+        <a href="https://github.com/shivpathakvw/springinsight/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer">Contribute</a>
+      </div>
+    </nav>
   </div>
 </footer>
 
