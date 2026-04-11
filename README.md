@@ -1,12 +1,18 @@
-# ⚡ SpringInsight
+# 🍃 SpringInsight
 
-> **Autonomous multi-agent codebase intelligence for Java & Spring Boot.**
+> **Autonomous multi-agent codebase intelligence for Java & Spring Boot.**  
+> 15 AI agents. 60 seconds. Find what code reviews miss.
 
-SpringInsight runs a fleet of AI agents over your Spring Boot project — simultaneously scanning for CVEs, dead code, security misconfigurations, architecture smells, and more — then delivers actionable, prioritised findings with exact fix recommendations.
+SpringInsight runs a fleet of AI agents over your Spring Boot project — simultaneously scanning for CVEs, dead code, security misconfigurations, N+1 queries, race conditions, API design violations, and more — then delivers actionable, prioritised findings with exact fix recommendations.
 
+[![PyPI version](https://img.shields.io/pypi/v/springinsight?style=flat-square&color=22c55e)](https://pypi.org/project/springinsight/)
+[![PyPI downloads](https://img.shields.io/pypi/dm/springinsight?style=flat-square&color=22c55e)](https://pypi.org/project/springinsight/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
-[![Open Source](https://img.shields.io/badge/open%20source-❤-f97316?style=flat-square)](https://github.com/shivpathakvw/springinsight)
+[![GitHub stars](https://img.shields.io/github/stars/shivpathakvw/springinsight?style=flat-square&color=f97316)](https://github.com/shivpathakvw/springinsight/stargazers)
+[![CI](https://img.shields.io/github/actions/workflow/status/shivpathakvw/springinsight/ci.yml?style=flat-square&label=CI)](https://github.com/shivpathakvw/springinsight/actions)
+
+**[🌐 Website](https://shivpathakvw.github.io/springinsight)** · **[📦 PyPI](https://pypi.org/project/springinsight/)** · **[⭐ Star on GitHub](https://github.com/shivpathakvw/springinsight)**
 
 ---
 
@@ -44,7 +50,8 @@ springinsight/
 │   ├── A09  PR Review
 │   ├── A11  Performance Analyzer
 │   ├── A13  API Design Auditor
-│   └── A14  Concurrency & Transaction Audit
+│   ├── A14  Concurrency & Transaction Audit
+│   └── A15  Dependency Graph (import + bean wiring + Mermaid)
 │
 └── Phase 3/4 agents  (claude-opus)    — synthesis & generation
     ├── A05  Architecture Review
@@ -157,24 +164,25 @@ The context is injected into every agent's prompt — this is what makes SpringI
 
 ## Agents Reference
 
-| ID  | Agent | Model | Phase | What it finds |
-|-----|-------|-------|-------|---------------|
-| A03 | CVE & License Scanner | Haiku | 1 | Log4Shell, Spring4Shell, Text4Shell, LGPL/GPL violations |
-| A10 | Dead Code Detector | Haiku | 1 | Unused classes, methods, fields (Spring-aware) |
-| A12 | Config & Infra Review | Haiku | 1 | Hardcoded secrets, actuator exposure, DDL-auto=create |
-| A01 | Deep Code Review | Sonnet | 2 | Code smells, SOLID violations, null safety |
-| A02 | Security Scanner | Sonnet | 2 | SQL injection, IDOR, missing auth, crypto issues |
-| A04 | Database & JPA Review | Sonnet | 2 | N+1 queries, missing indexes, fetch strategy issues |
-| A09 | PR Review | Sonnet | 2 | Breaking changes, blast radius, regression risk |
-| A11 | Performance Analyzer | Sonnet | 2 | Unbounded queries, cache misuse, thread pool sizing |
-| A13 | API Design Auditor | Sonnet | 2 | REST compliance, OpenAPI gaps, pagination missing |
-| A14 | Concurrency Audit | Sonnet | 2 | @Async safety, @Transactional correctness, locking |
-| A05 | Architecture Review | Opus | 3 | Coupling, layering, microservices fitness |
-| A08 | LLD Generator | Opus | 3 | Class/sequence/component diagrams in Mermaid |
-| A06 | Test Generator | Sonnet | 4 | JUnit 5 + Mockito tests for uncovered paths |
-| A07 | Feature Docs | Sonnet | 4 | Feature specs, API docs, sequence diagrams |
+| ID  | Agent | Model | Phase | Status | What it finds |
+|-----|-------|-------|-------|--------|---------------|
+| A03 | CVE & License Scanner | Haiku | 1 | ✅ Live | Log4Shell, Spring4Shell, Text4Shell, LGPL/GPL violations |
+| A10 | Dead Code Detector | Haiku | 1 | ✅ Live | Unused classes, methods, fields (Spring-aware) |
+| A12 | Config & Infra Review | Haiku | 1 | ✅ Live | Hardcoded secrets, actuator exposure, DDL-auto=create |
+| A01 | Deep Code Review | Sonnet | 2 | ✅ Live | Code smells, SOLID violations, null safety, Spring anti-patterns |
+| A02 | Security Scanner | Sonnet | 2 | ✅ Live | SQL/JPQL/SpEL injection, IDOR, JWT gaps, deserialization |
+| A04 | Database & JPA Review | Sonnet | 2 | ✅ Live | N+1 queries, FetchType.EAGER, missing @Version, Flyway risks |
+| A09 | PR Review | Sonnet | 2 | ✅ Live | Blast radius, breaking API changes, rollback feasibility |
+| A11 | Performance Analyzer | Sonnet | 2 | ✅ Live | Caching gaps, thread pool sizing, findAll() without pagination |
+| A13 | API Design Auditor | Sonnet | 2 | ✅ Live | REST compliance, @Valid missing, pagination, OpenAPI gaps |
+| A14 | Concurrency Audit | Sonnet | 2 | ✅ Live | Race conditions, @Transactional correctness, ThreadLocal leaks |
+| A15 | Dependency Graph | Sonnet | 2 | ✅ Live | Circular deps, hot-spots, God classes, Mermaid diagrams |
+| A05 | Architecture Review | Opus | 3 | 🔜 Soon | Coupling, layering violations, microservices fitness, ADRs |
+| A08 | LLD Generator | Opus | 3 | 🔜 Soon | Class/sequence/component diagrams in PlantUML + Mermaid |
+| A06 | Test Generator | Sonnet | 4 | 🔜 Soon | JUnit 5 + Mockito tests for uncovered critical paths |
+| A07 | Feature Docs | Sonnet | 4 | 🔜 Soon | Feature specs, API reference docs, developer guides |
 
-> **Phase 1 agents (A03, A10, A12) and Phase 2 agents (A01, A02, A04, A09, A11, A13, A14) are live.** Phase 3–4 (architecture diagrams, test generation) coming soon.
+> **Phase 1 (3 agents) and Phase 2 (8 agents) are live.** Phase 3–4 coming in the next releases.
 
 ---
 
@@ -252,11 +260,14 @@ A full Phase 1 scan of a mid-size project typically costs **less than $0.05**.
 ## Roadmap
 
 - [x] Phase 1: CVE scanner, dead code detector, config review (A03, A10, A12)
-- [x] Phase 2: Deep code review, OWASP security scan, DB/JPA review, PR review, performance, API audit, concurrency (A01, A02, A04, A09, A11, A13, A14)
+- [x] Phase 2: Deep code review, OWASP security, DB/JPA, PR review, performance, API audit, concurrency, dependency graph (A01–A04, A09, A11, A13–A15)
+- [x] Product website (GitHub Pages) — [shivpathakvw.github.io/springinsight](https://shivpathakvw.github.io/springinsight)
+- [x] PyPI publishing with OIDC trusted publishing
 - [ ] Phase 3: Architecture review, LLD generator (A05, A08)
 - [ ] Phase 4: Test generator, feature documentation (A06, A07)
-- [ ] GitHub Actions integration (`springinsight-action`)
-- [ ] VS Code extension
+- [ ] GitHub Actions integration (`springinsight-action` marketplace)
+- [ ] VS Code extension (findings as CodeLens annotations)
+- [ ] MCP server (Claude Code / Cursor / Cline integration)
 - [ ] SaaS hosted version
 
 ---

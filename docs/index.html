@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SpringInsight — Autonomous Code Intelligence for Spring Boot</title>
+  <meta name="description" content="Scan any Spring Boot codebase in seconds. 15 AI agents find CVEs, security holes, N+1 queries, race conditions, and dead code — powered by Claude." />
+  <meta name="author" content="Shiv Chandra Pathak" />
+  <meta property="og:title" content="SpringInsight — Autonomous Code Intelligence for Spring Boot" />
+  <meta property="og:description" content="15 AI agents. 3 intelligence tiers. Find critical issues in any Spring Boot repo in under 60 seconds." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://shivpathakvw.github.io/springinsight" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍃</text></svg>" />
+
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:        #08080b;
+      --surface:   #111118;
+      --surface2:  #16161f;
+      --border:    #1e1e2e;
+      --green:     #22c55e;
+      --green-dim: #15803d;
+      --orange:    #f97316;
+      --blue:      #3b82f6;
+      --purple:    #a855f7;
+      --red:       #ef4444;
+      --yellow:    #eab308;
+      --text:      #e2e8f0;
+      --text-dim:  #64748b;
+      --text-mid:  #94a3b8;
+      --mono:      'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+    a { color: var(--green); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, pre {
+      font-family: var(--mono);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    code { padding: 2px 6px; font-size: 0.85em; color: var(--green); }
+    pre { padding: 1.2rem 1.5rem; overflow-x: auto; font-size: 0.85rem; line-height: 1.7; }
+    pre code { background: none; border: none; padding: 0; color: var(--text); }
+
+    /* ── Layout Helpers ───────────────────────────────────────────────────── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 1.5rem; }
+    .section { padding: 5rem 0; }
+    .section-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--green);
+      margin-bottom: 0.75rem;
+    }
+    .section-title {
+      font-size: clamp(1.8rem, 4vw, 2.75rem);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      margin-bottom: 1rem;
+    }
+    .section-sub {
+      font-size: 1.1rem;
+      color: var(--text-mid);
+      max-width: 580px;
+      margin-bottom: 3rem;
+    }
+    .tag {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+    .tag-green  { background: rgba(34,197,94,.15);  color: var(--green);  border: 1px solid rgba(34,197,94,.3); }
+    .tag-orange { background: rgba(249,115,22,.15); color: var(--orange); border: 1px solid rgba(249,115,22,.3); }
+    .tag-blue   { background: rgba(59,130,246,.15); color: var(--blue);   border: 1px solid rgba(59,130,246,.3); }
+    .tag-purple { background: rgba(168,85,247,.15); color: var(--purple); border: 1px solid rgba(168,85,247,.3); }
+    .tag-red    { background: rgba(239,68,68,.15);  color: var(--red);    border: 1px solid rgba(239,68,68,.3); }
+    .tag-yellow { background: rgba(234,179,8,.15);  color: var(--yellow); border: 1px solid rgba(234,179,8,.3); }
+
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.5rem; }
+    .grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      transition: border-color .2s, transform .2s;
+    }
+    .card:hover { border-color: var(--green-dim); transform: translateY(-2px); }
+
+    /* ── Nav ──────────────────────────────────────────────────────────────── */
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(8,8,11,.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 60px;
+      gap: 2rem;
+    }
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 1.1rem;
+      font-weight: 800;
+      color: var(--text);
+      letter-spacing: -0.02em;
+    }
+    .nav-logo span { color: var(--green); }
+    .nav-links { display: flex; align-items: center; gap: 1.75rem; }
+    .nav-links a {
+      font-size: 0.875rem;
+      color: var(--text-mid);
+      transition: color .15s;
+    }
+    .nav-links a:hover { color: var(--text); text-decoration: none; }
+    .nav-cta {
+      background: var(--green);
+      color: #000 !important;
+      font-weight: 700;
+      padding: 0.45rem 1.1rem;
+      border-radius: 7px;
+      font-size: 0.85rem !important;
+    }
+    .nav-cta:hover { background: #16a34a; text-decoration: none !important; }
+
+    /* ── Hero ─────────────────────────────────────────────────────────────── */
+    .hero {
+      padding: 7rem 0 5rem;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -200px; left: 50%;
+      transform: translateX(-50%);
+      width: 800px; height: 500px;
+      background: radial-gradient(ellipse at center, rgba(34,197,94,.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(34,197,94,.1);
+      border: 1px solid rgba(34,197,94,.25);
+      border-radius: 999px;
+      padding: 0.35rem 1rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--green);
+      margin-bottom: 2rem;
+    }
+    .hero-title {
+      font-size: clamp(2.5rem, 7vw, 4.5rem);
+      font-weight: 900;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      margin-bottom: 1.5rem;
+    }
+    .hero-title em { color: var(--green); font-style: normal; }
+    .hero-sub {
+      font-size: clamp(1rem, 2.5vw, 1.25rem);
+      color: var(--text-mid);
+      max-width: 600px;
+      margin: 0 auto 2.5rem;
+    }
+    .hero-ctas {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 3rem;
+    }
+    .btn-primary {
+      background: var(--green);
+      color: #000;
+      font-weight: 700;
+      font-size: 0.95rem;
+      padding: 0.75rem 1.75rem;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      transition: background .15s, transform .1s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .btn-primary:hover { background: #16a34a; transform: translateY(-1px); text-decoration: none; }
+    .btn-secondary {
+      background: transparent;
+      color: var(--text);
+      font-weight: 600;
+      font-size: 0.95rem;
+      padding: 0.75rem 1.75rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: border-color .15s, transform .1s;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .btn-secondary:hover { border-color: var(--text-dim); transform: translateY(-1px); text-decoration: none; }
+    .hero-install {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.85rem 1.5rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 1rem;
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      color: var(--text-mid);
+      max-width: 100%;
+    }
+    .hero-install .prompt { color: var(--green); }
+    .hero-install .cmd { color: var(--text); }
+    .hero-stats {
+      display: flex;
+      justify-content: center;
+      gap: 2.5rem;
+      flex-wrap: wrap;
+      padding-top: 3rem;
+      border-top: 1px solid var(--border);
+      margin-top: 3rem;
+    }
+    .hero-stat { text-align: center; }
+    .hero-stat-num {
+      font-size: 2rem;
+      font-weight: 900;
+      color: var(--green);
+      letter-spacing: -0.03em;
+    }
+    .hero-stat-label { font-size: 0.8rem; color: var(--text-dim); margin-top: 2px; }
+
+    /* ── Agent Phases ─────────────────────────────────────────────────────── */
+    .phase-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .phase-badge {
+      font-size: 0.7rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 999px;
+    }
+    .phase-1 { background: rgba(34,197,94,.15); color: var(--green); border: 1px solid rgba(34,197,94,.3); }
+    .phase-2 { background: rgba(59,130,246,.15); color: var(--blue);  border: 1px solid rgba(59,130,246,.3); }
+    .phase-3 { background: rgba(168,85,247,.15); color: var(--purple);border: 1px solid rgba(168,85,247,.3); }
+    .phase-model { font-size: 0.8rem; color: var(--text-dim); }
+
+    .agent-grid { display: flex; flex-direction: column; gap: 2.5rem; }
+    .agent-row {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.75rem;
+    }
+    .agents-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; margin-top: 1.25rem; }
+    .agent-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.15rem;
+    }
+    .agent-id { font-family: var(--mono); font-size: 0.7rem; color: var(--text-dim); margin-bottom: 4px; }
+    .agent-name { font-weight: 700; font-size: 0.9rem; margin-bottom: 0.4rem; }
+    .agent-desc { font-size: 0.8rem; color: var(--text-mid); line-height: 1.5; }
+
+    /* ── Intelligence Layers ──────────────────────────────────────────────── */
+    .layer-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 2rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .layer-card::before {
+      content: attr(data-num);
+      position: absolute;
+      top: -10px; right: 16px;
+      font-size: 6rem;
+      font-weight: 900;
+      opacity: 0.04;
+      line-height: 1;
+      user-select: none;
+    }
+    .layer-num {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: var(--green);
+      margin-bottom: 0.75rem;
+    }
+    .layer-title { font-size: 1.25rem; font-weight: 800; margin-bottom: 0.75rem; }
+    .layer-desc { font-size: 0.9rem; color: var(--text-mid); line-height: 1.65; }
+    .layer-bullets { list-style: none; margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
+    .layer-bullets li { font-size: 0.83rem; color: var(--text-mid); display: flex; align-items: flex-start; gap: 0.5rem; }
+    .layer-bullets li::before { content: '→'; color: var(--green); flex-shrink: 0; margin-top: 1px; }
+
+    /* ── Use Cases ────────────────────────────────────────────────────────── */
+    .usecase-icon { font-size: 2rem; margin-bottom: 0.75rem; }
+    .usecase-title { font-weight: 700; font-size: 1rem; margin-bottom: 0.5rem; }
+    .usecase-desc { font-size: 0.85rem; color: var(--text-mid); line-height: 1.6; }
+
+    /* ── Compare Table ────────────────────────────────────────────────────── */
+    .compare-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+    th {
+      text-align: left;
+      padding: 0.75rem 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text-mid);
+      font-weight: 600;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    th.highlight { color: var(--green); background: rgba(34,197,94,.06); }
+    td {
+      padding: 0.7rem 1rem;
+      border: 1px solid var(--border);
+      color: var(--text-mid);
+      vertical-align: middle;
+    }
+    td.feature-col { color: var(--text); font-weight: 500; }
+    td.highlight { background: rgba(34,197,94,.04); }
+    .check { color: var(--green); font-weight: 700; }
+    .cross { color: var(--text-dim); }
+    .partial { color: var(--yellow); }
+
+    /* ── How It Works ─────────────────────────────────────────────────────── */
+    .steps { display: flex; flex-direction: column; gap: 0; }
+    .step {
+      display: flex;
+      gap: 1.5rem;
+      padding: 1.5rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .step:last-child { border-bottom: none; }
+    .step-num {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(34,197,94,.15);
+      border: 1px solid rgba(34,197,94,.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--green);
+      flex-shrink: 0;
+    }
+    .step-content h3 { font-weight: 700; margin-bottom: 0.35rem; }
+    .step-content p { font-size: 0.875rem; color: var(--text-mid); }
+
+    /* ── Pricing / Access ─────────────────────────────────────────────────── */
+    .price-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 2rem;
+    }
+    .price-card.featured {
+      border-color: var(--green);
+      background: rgba(34,197,94,.04);
+      position: relative;
+    }
+    .price-badge {
+      position: absolute;
+      top: -1px; right: 1.5rem;
+      background: var(--green);
+      color: #000;
+      font-size: 0.7rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border-radius: 0 0 6px 6px;
+    }
+    .price-name { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.5rem; }
+    .price-cost { font-size: 2rem; font-weight: 900; color: var(--green); letter-spacing: -0.02em; }
+    .price-cost span { font-size: 0.9rem; font-weight: 400; color: var(--text-dim); }
+    .price-desc { font-size: 0.85rem; color: var(--text-mid); margin: 0.75rem 0 1.25rem; }
+    .price-features { list-style: none; display: flex; flex-direction: column; gap: 0.6rem; }
+    .price-features li { font-size: 0.85rem; display: flex; align-items: flex-start; gap: 0.6rem; color: var(--text-mid); }
+    .price-features li::before { content: '✓'; color: var(--green); font-weight: 700; flex-shrink: 0; }
+
+    /* ── CTA Banner ───────────────────────────────────────────────────────── */
+    .cta-banner {
+      background: linear-gradient(135deg, rgba(34,197,94,.08) 0%, rgba(59,130,246,.06) 100%);
+      border: 1px solid rgba(34,197,94,.2);
+      border-radius: 20px;
+      padding: 4rem 2rem;
+      text-align: center;
+    }
+    .cta-banner h2 { font-size: clamp(1.75rem, 4vw, 2.5rem); font-weight: 900; letter-spacing: -0.02em; margin-bottom: 1rem; }
+    .cta-banner p { color: var(--text-mid); max-width: 480px; margin: 0 auto 2rem; }
+
+    /* ── Footer ───────────────────────────────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2.5rem 0;
+      font-size: 0.83rem;
+      color: var(--text-dim);
+    }
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .footer-links { display: flex; gap: 1.5rem; }
+    .footer-links a { color: var(--text-dim); transition: color .15s; }
+    .footer-links a:hover { color: var(--text); text-decoration: none; }
+
+    /* ── Divider ──────────────────────────────────────────────────────────── */
+    hr { border: none; border-top: 1px solid var(--border); }
+
+    /* ── Responsive ───────────────────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      .nav-links { display: none; }
+      .hero { padding: 4rem 0 3rem; }
+      .section { padding: 3.5rem 0; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── NAV ──────────────────────────────────────────────────────────────── -->
+<nav>
+  <div class="container nav-inner">
+    <a class="nav-logo" href="#" style="text-decoration:none">🍃 Spring<span>Insight</span></a>
+    <div class="nav-links">
+      <a href="#agents">Agents</a>
+      <a href="#layers">Intelligence</a>
+      <a href="#how">How It Works</a>
+      <a href="#compare">Compare</a>
+      <a href="#access">Get Access</a>
+      <a href="https://github.com/shivpathakvw/springinsight" target="_blank">GitHub</a>
+      <a class="nav-cta" href="#access">Install Free →</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ── HERO ─────────────────────────────────────────────────────────────── -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-eyebrow">
+      <span>✦</span>
+      <span>Open Source · MIT · v0.2.0</span>
+    </div>
+
+    <h1 class="hero-title">
+      Understand any <em>Spring Boot</em><br/>codebase in seconds
+    </h1>
+    <p class="hero-sub">
+      15 AI agents scan your Java project for CVEs, OWASP Top 10 vulnerabilities, N+1 queries,
+      race conditions, dead code, and architectural debt — in one command.
+    </p>
+
+    <div class="hero-ctas">
+      <a class="btn-primary" href="#access">
+        ↓ pip install springinsight
+      </a>
+      <a class="btn-secondary" href="https://github.com/shivpathakvw/springinsight" target="_blank">
+        ★ Star on GitHub
+      </a>
+    </div>
+
+    <div class="hero-install">
+      <span class="prompt">$</span>
+      <span class="cmd">springinsight run https://github.com/your-org/your-spring-app</span>
+    </div>
+
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <div class="hero-stat-num">15</div>
+        <div class="hero-stat-label">AI agents</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num">3</div>
+        <div class="hero-stat-label">intelligence tiers</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num">&lt;60s</div>
+        <div class="hero-stat-label">first scan</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num">MIT</div>
+        <div class="hero-stat-label">open source</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num">0¢</div>
+        <div class="hero-stat-label">to self-host</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr />
+
+<!-- ── HOW IT WORKS ──────────────────────────────────────────────────────── -->
+<section class="section" id="how">
+  <div class="container">
+    <div class="section-label">01 How It Works</div>
+    <h2 class="section-title">One command.<br/>Fifteen agents. Complete picture.</h2>
+    <p class="section-sub">SpringInsight clones your repo, spins up a multi-agent pipeline, and delivers findings ranked by severity — all from a single command.</p>
+
+    <div class="grid-2" style="gap:2.5rem; align-items:start">
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h3>Point at any Spring Boot repo</h3>
+            <p>Pass a GitHub URL or local path. SpringInsight reads your <code>pom.xml</code> / <code>build.gradle</code>, <code>application.yml</code>, and all Java sources. No build required.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h3>Agents run in parallel</h3>
+            <p>Phase 1 Haiku agents run first (fast, cheap pattern matching). Phase 2 Sonnet agents run deep analysis. Each agent is driven by a curated SKILL.md — a behavioral contract honed for Spring Boot idioms.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h3>Findings saved to SQLite</h3>
+            <p>Every finding has a severity, file, line number, impact description, and a concrete fix with code. Scores are calculated per dimension (Security, Performance, Quality, etc.).</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <h3>Read findings your way</h3>
+            <p>CLI report, filterable web dashboard, or JSON output. Pipe into CI/CD to fail builds on CRITICAL findings. Run <code>springinsight web</code> for the live SSE progress UI.</p>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <pre><code><span style="color:var(--green)">$</span> springinsight run https://github.com/acme/orders-service
+
+<span style="color:var(--text-dim)">Cloning repository...</span>
+<span style="color:var(--text-dim)">Loaded context: orders-service (15 modules)</span>
+
+<span style="color:var(--green)">Phase 1 — Haiku (fast scan)</span>
+  ✅  A03  CVE & License Scanner    <span style="color:var(--text-dim)">3.2s</span>
+  ✅  A10  Dead Code Detector       <span style="color:var(--text-dim)">4.1s</span>
+  ✅  A12  Config & Infra Review    <span style="color:var(--text-dim)">2.8s</span>
+
+<span style="color:var(--blue)">Phase 2 — Sonnet (deep analysis)</span>
+  ✅  A01  Deep Code Review         <span style="color:var(--text-dim)">18s</span>
+  ✅  A02  Security Scanner         <span style="color:var(--text-dim)">21s</span>
+  ✅  A04  Database & JPA Review    <span style="color:var(--text-dim)">14s</span>
+  ✅  A09  PR Review                <span style="color:var(--text-dim)">9s</span>
+  ✅  A11  Performance Analyzer     <span style="color:var(--text-dim)">16s</span>
+  ✅  A13  API Design Auditor       <span style="color:var(--text-dim)">12s</span>
+  ✅  A14  Concurrency Audit        <span style="color:var(--text-dim)">15s</span>
+  ✅  A15  Dependency Graph         <span style="color:var(--text-dim)">11s</span>
+
+<span style="color:var(--red)">CRITICAL  2</span>  <span style="color:var(--orange)">HIGH  11</span>  <span style="color:var(--yellow)">MEDIUM  34</span>  LOW  18
+
+<span style="color:var(--text-dim)">Report: .springinsight/reports/2026-04-11_orders-service.md</span>
+<span style="color:var(--text-dim)">Run `springinsight web` to explore findings in the browser.</span></code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr />
+
+<!-- ── AGENTS ─────────────────────────────────────────────────────────────── -->
+<section class="section" id="agents">
+  <div class="container">
+    <div class="section-label">02 The Agents</div>
+    <h2 class="section-title">Purpose-built for<br/>Spring Boot idioms</h2>
+    <p class="section-sub">Every agent is powered by a SKILL.md — a curated behavioral contract that encodes Spring Boot-specific patterns, anti-patterns, and fix templates.</p>
+
+    <div class="agent-grid">
+
+      <!-- Phase 1 -->
+      <div class="agent-row">
+        <div class="phase-header">
+          <span class="phase-badge phase-1">Phase 1</span>
+          <span class="phase-model">claude-haiku · fast · ≈3–5s per agent</span>
+        </div>
+        <p style="font-size:.875rem;color:var(--text-mid);margin-bottom:1rem">Pattern-matching agents that scan your entire repo in seconds. Run first — cheap to run on every commit.</p>
+        <div class="agents-list">
+          <div class="agent-item">
+            <div class="agent-id">A03</div>
+            <div class="agent-name">CVE &amp; License Scanner</div>
+            <div class="agent-desc">Checks pom.xml / build.gradle against known CVEs (Spring4Shell, Log4Shell, Text4Shell) and flags GPL/AGPL license conflicts.</div>
+          </div>
+          <div class="agent-item">
+            <div class="agent-id">A10</div>
+            <div class="agent-name">Dead Code Detector</div>
+            <div class="agent-desc">Builds a full cross-reference map. Spring-aware: suppresses false positives from @Bean, @EventListener, @Scheduled, JPA entity fields.</div>
+          </div>
+          <div class="agent-item">
+            <div class="agent-id">A12</div>
+            <div class="agent-name">Config &amp; Infra Review</div>
+            <div class="agent-desc">Finds hardcoded secrets, exposed actuator endpoints, DDL-auto=create in prod, Docker root user, CI/CD secret leaks.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 2 -->
+      <div class="agent-row">
+        <div class="phase-header">
+          <span class="phase-badge phase-2">Phase 2</span>
+          <span class="phase-model">claude-sonnet · deep · ≈10–25s per agent</span>
+        </div>
+        <p style="font-size:.875rem;color:var(--text-mid);margin-bottom:1rem">Deep reasoning agents that understand Spring semantics — bean proxying, transaction boundaries, JPA fetch strategies — not just syntax.</p>
+        <div class="agents-list">
+          <div class="agent-item">
+            <div class="agent-id">A01</div>
+            <div class="agent-name">Deep Code Review</div>
+            <div class="agent-desc">SOLID violations, God classes, null safety (Optional.get() without isPresent), @Transactional on private methods, circular bean dependencies.</div>
+          </div>
+          <div class="agent-item">
+            <div class="agent-id">A02</div>
+            <div class="agent-name">Security Scanner</div>
+            <div class="agent-desc">Full OWASP Top 10 for Spring Boot: IDOR, mass assignment, SQL/JPQL/SpEL injection, weak crypto, JWT validation gaps, SSRF, deserialization.</div>
+          </div>
+          <div class="agent-item">
+            <div class="agent-id">A04</div>
+            <div class="agent-name">Database &amp; JPA Review</div>
+            <div class="agent-desc">N+1 detection by cross-referencing repository queries with service loop patterns, FetchType.EAGER on collections, missing @Version, Flyway risks.</div>
+          </div>
+          <div class="agent-item">
+            <div class="agent-id">A09</div>
+            <div class="agent-name">PR Review</div>
+            <div class="agent-desc">Git diff blast radius, breaking API contract changes, schema migration risks, missing test coverage, rollback feasibility scoring.</div>
+          </div>
+          <div class="agent-item">
+            <div class="agent-id">A11</div>
+            <div class="agent-name">Performance Analyzer</div>
+            <div class="agent-desc">Caching gaps, @Async with SimpleAsyncTaskExecutor (no thread pool), findAll() on large tables, synchronous HTTP inside @Transactional.</div>
+          </div>
+          <div class="agent-item">
+            <div class="agent-id">A13</div>
+            <div class="agent-name">API Design Auditor</div>
+            <div class="agent-desc">REST compliance, wrong HTTP status codes, @RequestBody without @Valid, JPA entities exposed as API responses, missing pagination, OpenAPI gaps.</div>
+          </div>
+          <div class="agent-item">
+            <div class="agent-id">A14</div>
+            <div class="agent-name">Concurrency Audit</div>
+            <div class="agent-desc">Race conditions in singleton beans, self-invocation bypassing Spring proxy, ThreadLocal leaks in filters, @Async swallowing exceptions silently.</div>
+          </div>
+          <div class="agent-item">
+            <div class="agent-id">A15</div>
+            <div class="agent-name">Dependency Graph</div>
+            <div class="agent-desc">Import + Spring bean wiring graph. Circular dependency detection, hot-spot ranking by in-degree, God class detection. Mermaid diagram output.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 3 coming soon -->
+      <div class="agent-row" style="opacity:.65">
+        <div class="phase-header">
+          <span class="phase-badge phase-3">Phase 3 — Coming Soon</span>
+          <span class="phase-model">claude-opus · generation</span>
+        </div>
+        <div class="agents-list">
+          <div class="agent-item">
+            <div class="agent-id">A05</div>
+            <div class="agent-name">Architecture Review</div>
+            <div class="agent-desc">SOLID at architecture level, layer coupling, microservices fitness, ADR generation.</div>
+          </div>
+          <div class="agent-item">
+            <div class="agent-id">A08</div>
+            <div class="agent-name">LLD Generator</div>
+            <div class="agent-desc">Class diagrams, sequence diagrams, component maps in PlantUML and Mermaid.</div>
+          </div>
+          <div class="agent-item">
+            <div class="agent-id">A06</div>
+            <div class="agent-name">Test Generator</div>
+            <div class="agent-desc">JUnit 5 + Mockito test classes for uncovered critical paths identified by A01/A02.</div>
+          </div>
+          <div class="agent-item">
+            <div class="agent-id">A07</div>
+            <div class="agent-name">Feature Documentation</div>
+            <div class="agent-desc">Feature specs, API reference docs, developer onboarding guides, sequence diagrams.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<hr />
+
+<!-- ── INTELLIGENCE LAYERS ────────────────────────────────────────────────── -->
+<section class="section" id="layers">
+  <div class="container">
+    <div class="section-label">03 Intelligence Layers</div>
+    <h2 class="section-title">Four dimensions.<br/>One unified score.</h2>
+    <p class="section-sub">SpringInsight doesn't just dump lint warnings. It reasons about your codebase across four interconnected intelligence dimensions.</p>
+
+    <div class="grid-2">
+
+      <div class="layer-card" data-num="1">
+        <div class="layer-num">01 — SECURITY</div>
+        <div class="layer-title">OWASP Top 10 for Spring Boot</div>
+        <div class="layer-desc">Goes beyond grep-based secret scanning. Understands Spring Security configuration, JWT validation chains, SpEL injection via @Query, and IDOR patterns in @PathVariable handlers.</div>
+        <ul class="layer-bullets">
+          <li>SQL / JPQL / SpEL / HQL injection detection</li>
+          <li>Mass assignment via @ModelAttribute without @InitBinder</li>
+          <li>Insecure deserialization — Jackson enableDefaultTyping</li>
+          <li>Hardcoded credentials, weak crypto (MD5, ECB mode)</li>
+        </ul>
+      </div>
+
+      <div class="layer-card" data-num="2">
+        <div class="layer-num">02 — RELIABILITY</div>
+        <div class="layer-title">Transaction & Concurrency</div>
+        <div class="layer-desc">Finds the bugs that only appear under concurrent production load — the kind that pass code review and pass tests, but corrupt data at 2 AM.</div>
+        <ul class="layer-bullets">
+          <li>Race conditions on shared mutable state in @Service beans</li>
+          <li>@Transactional self-invocation bypassing the Spring proxy</li>
+          <li>Lost updates — missing @Version on concurrently-written entities</li>
+          <li>ThreadLocal leaks across request boundaries</li>
+        </ul>
+      </div>
+
+      <div class="layer-card" data-num="3">
+        <div class="layer-num">03 — PERFORMANCE</div>
+        <div class="layer-title">N+1, Caching & Thread Pools</div>
+        <div class="layer-desc">Identifies performance bottlenecks before they appear in production metrics. Estimates concrete impact: "1001 SQL queries per request at 1000 parent rows."</div>
+        <ul class="layer-bullets">
+          <li>N+1 by cross-referencing service loops with lazy collections</li>
+          <li>Missing @Cacheable on expensive read-only operations</li>
+          <li>@Async with SimpleAsyncTaskExecutor — new thread per call</li>
+          <li>findAll() without pagination on large tables</li>
+        </ul>
+      </div>
+
+      <div class="layer-card" data-num="4">
+        <div class="layer-num">04 — GRAPH INTELLIGENCE</div>
+        <div class="layer-title">Dependency Graph & Hot Spots</div>
+        <div class="layer-desc">Parses the full import graph and Spring bean wiring to compute PageRank, detect circular dependencies, and identify architectural hot-spots.</div>
+        <ul class="layer-bullets">
+          <li>Circular dependency detection with Spring-specific BeanCreation risk</li>
+          <li>Hot-spot ranking: in-degree &gt; 10 = change-blast risk</li>
+          <li>God class detection: out-degree &gt; 15 = refactor candidate</li>
+          <li>Instability metric: 0 (stable core) → 1 (volatile leaf)</li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<hr />
+
+<!-- ── USE CASES ──────────────────────────────────────────────────────────── -->
+<section class="section">
+  <div class="container">
+    <div class="section-label">04 Use Cases</div>
+    <h2 class="section-title">Built for every<br/>team workflow</h2>
+    <div class="grid-3">
+      <div class="card">
+        <div class="usecase-icon">🔍</div>
+        <div class="usecase-title">Pre-PR Security Gate</div>
+        <div class="usecase-desc">Add SpringInsight to CI. Block merges on CRITICAL findings automatically. Every PR gets an AI security review before it touches main.</div>
+      </div>
+      <div class="card">
+        <div class="usecase-icon">🏗️</div>
+        <div class="usecase-title">Legacy Codebase Audit</div>
+        <div class="usecase-desc">Onboard to an unfamiliar Spring Boot service in minutes. Get the full dependency graph, hot-spot map, and a prioritised list of debt to tackle first.</div>
+      </div>
+      <div class="card">
+        <div class="usecase-icon">⚡</div>
+        <div class="usecase-title">Performance Triage</div>
+        <div class="usecase-desc">P99 latency spiking? Run the Performance + Database agents before reaching for a profiler. Find N+1 queries and cache gaps in seconds.</div>
+      </div>
+      <div class="card">
+        <div class="usecase-icon">🎓</div>
+        <div class="usecase-title">Developer Education</div>
+        <div class="usecase-desc">Junior devs get actionable findings with explanations and fix code snippets — not just "bad practice detected." Learn Spring Boot best practices in context.</div>
+      </div>
+      <div class="card">
+        <div class="usecase-icon">🚀</div>
+        <div class="usecase-title">Pre-Production Checklist</div>
+        <div class="usecase-desc">Run the full 15-agent scan before releasing. Catch the DDL-auto=create in prod, actuator endpoints exposed, and JWT validation gaps before your users do.</div>
+      </div>
+      <div class="card">
+        <div class="usecase-icon">📊</div>
+        <div class="usecase-title">Architecture Health Score</div>
+        <div class="usecase-desc">Track code quality over time. Every scan produces a score per dimension (0–100). Watch Security, Performance, and Quality scores trend over your releases.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr />
+
+<!-- ── COMPARE ────────────────────────────────────────────────────────────── -->
+<section class="section" id="compare">
+  <div class="container">
+    <div class="section-label">05 How We Compare</div>
+    <h2 class="section-title">Designed for Spring.<br/>Not generic Java linters.</h2>
+    <p class="section-sub">General-purpose static analysis tools don't understand Spring's proxy model, transaction boundaries, or JPA fetch strategies. SpringInsight does.</p>
+
+    <div class="compare-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:30%">Feature</th>
+            <th class="highlight">🍃 SpringInsight</th>
+            <th>SonarQube</th>
+            <th>SpotBugs</th>
+            <th>Checkmarx</th>
+            <th>Manual Review</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="feature-col">Spring-aware analysis</td>
+            <td class="highlight check">✓ Built-in</td>
+            <td class="partial">~ Plugins</td>
+            <td class="cross">✗</td>
+            <td class="partial">~ Partial</td>
+            <td class="partial">~ Depends</td>
+          </tr>
+          <tr>
+            <td class="feature-col">N+1 query detection</td>
+            <td class="highlight check">✓ Cross-ref</td>
+            <td class="cross">✗</td>
+            <td class="cross">✗</td>
+            <td class="cross">✗</td>
+            <td class="partial">~ Manual</td>
+          </tr>
+          <tr>
+            <td class="feature-col">@Transactional correctness</td>
+            <td class="highlight check">✓ Deep</td>
+            <td class="cross">✗</td>
+            <td class="cross">✗</td>
+            <td class="cross">✗</td>
+            <td class="partial">~ Manual</td>
+          </tr>
+          <tr>
+            <td class="feature-col">OWASP Top 10 for Spring</td>
+            <td class="highlight check">✓ A02</td>
+            <td class="partial">~ Basic</td>
+            <td class="cross">✗</td>
+            <td class="check">✓</td>
+            <td class="partial">~ Manual</td>
+          </tr>
+          <tr>
+            <td class="feature-col">Dependency graph + Mermaid</td>
+            <td class="highlight check">✓ A15</td>
+            <td class="partial">~ Basic</td>
+            <td class="cross">✗</td>
+            <td class="cross">✗</td>
+            <td class="cross">✗</td>
+          </tr>
+          <tr>
+            <td class="feature-col">Actionable fix code snippets</td>
+            <td class="highlight check">✓ Every finding</td>
+            <td class="cross">✗</td>
+            <td class="cross">✗</td>
+            <td class="cross">✗</td>
+            <td class="partial">~ Sometimes</td>
+          </tr>
+          <tr>
+            <td class="feature-col">Works without build</td>
+            <td class="highlight check">✓ Source only</td>
+            <td class="cross">✗</td>
+            <td class="cross">✗ Bytecode</td>
+            <td class="cross">✗</td>
+            <td class="check">✓</td>
+          </tr>
+          <tr>
+            <td class="feature-col">pip install — no infra</td>
+            <td class="highlight check">✓</td>
+            <td class="cross">✗ Server</td>
+            <td class="partial">~ Plugin</td>
+            <td class="cross">✗ SaaS</td>
+            <td class="check">✓</td>
+          </tr>
+          <tr>
+            <td class="feature-col">Open source / MIT</td>
+            <td class="highlight check">✓</td>
+            <td class="partial">~ Comm. Ed.</td>
+            <td class="check">✓ LGPL</td>
+            <td class="cross">✗ Commercial</td>
+            <td class="check">✓</td>
+          </tr>
+          <tr>
+            <td class="feature-col">Cost to get started</td>
+            <td class="highlight check">Free</td>
+            <td class="cross">Server + setup</td>
+            <td class="check">Free</td>
+            <td class="cross">$$$</td>
+            <td class="cross">Engineer time</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<hr />
+
+<!-- ── INTERFACES ─────────────────────────────────────────────────────────── -->
+<section class="section">
+  <div class="container">
+    <div class="section-label">06 Interfaces</div>
+    <h2 class="section-title">Use it how<br/>you work.</h2>
+    <div class="grid-3">
+
+      <div class="card">
+        <div style="font-size:1.75rem;margin-bottom:1rem">⌨️</div>
+        <h3 style="font-weight:700;margin-bottom:.5rem">CLI</h3>
+        <p style="font-size:.875rem;color:var(--text-mid);margin-bottom:1rem">Full analysis from your terminal. Pipe findings into CI, Slack webhooks, or JIRA.</p>
+        <pre style="font-size:.78rem"><code>springinsight run ./my-app
+springinsight report --severity HIGH
+springinsight findings --agent A02
+springinsight history</code></pre>
+      </div>
+
+      <div class="card">
+        <div style="font-size:1.75rem;margin-bottom:1rem">🌐</div>
+        <h3 style="font-weight:700;margin-bottom:.5rem">Web UI</h3>
+        <p style="font-size:.875rem;color:var(--text-mid);margin-bottom:1rem">Dark-themed dashboard with SSE live progress, score gauges, and a filterable findings table.</p>
+        <pre style="font-size:.78rem"><code>springinsight web --open
+# Opens http://localhost:8080
+# Paste GitHub URL → scan starts
+# Live agent progress stream
+# Persistent history in SQLite</code></pre>
+      </div>
+
+      <div class="card">
+        <div style="font-size:1.75rem;margin-bottom:1rem">🔌</div>
+        <h3 style="font-weight:700;margin-bottom:.5rem">MCP Server <span class="tag tag-yellow" style="font-size:.65rem">Coming Soon</span></h3>
+        <p style="font-size:.875rem;color:var(--text-mid);margin-bottom:1rem">Expose SpringInsight tools directly to Claude Code, Cursor, or Cline via the Model Context Protocol.</p>
+        <pre style="font-size:.78rem"><code># In Claude Code:
+> run_springinsight(url="...")
+> get_findings(severity="CRITICAL")
+> get_dependency_graph()</code></pre>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<hr />
+
+<!-- ── GET ACCESS ─────────────────────────────────────────────────────────── -->
+<section class="section" id="access">
+  <div class="container">
+    <div class="section-label">07 Get Access</div>
+    <h2 class="section-title">Free. Open. Yours.</h2>
+    <p class="section-sub">SpringInsight is MIT licensed. Your code never leaves your machine unless you choose to scan a GitHub URL.</p>
+
+    <div class="grid-3">
+
+      <div class="price-card featured">
+        <div class="price-badge">Recommended</div>
+        <div class="price-name">Self-Host</div>
+        <div class="price-cost">Free <span>forever</span></div>
+        <div class="price-desc">Full feature set. Runs on your machine. Code never leaves your infrastructure.</div>
+        <ul class="price-features">
+          <li>All 15 agents (Phase 1 + 2 live now)</li>
+          <li>CLI + Web UI included</li>
+          <li>SQLite persistent history</li>
+          <li>GitHub URL + local path support</li>
+          <li>MIT license — use in commercial projects</li>
+        </ul>
+        <div style="margin-top:1.5rem">
+          <pre style="font-size:.82rem"><code><span style="color:var(--green)">$</span> pip install springinsight
+<span style="color:var(--green)">$</span> pip install "springinsight[web]"
+<span style="color:var(--text-dim)"># Requires: ANTHROPIC_API_KEY</span></code></pre>
+        </div>
+      </div>
+
+      <div class="price-card">
+        <div class="price-name">Hosted <span class="tag tag-yellow" style="font-size:.65rem">Coming Soon</span></div>
+        <div class="price-cost">TBD</div>
+        <div class="price-desc">Managed infrastructure. No API key management. Team sharing and collaborative findings.</div>
+        <ul class="price-features">
+          <li>GitHub App integration</li>
+          <li>PR comments with findings</li>
+          <li>Team dashboards</li>
+          <li>Shared finding history</li>
+          <li>No setup required</li>
+        </ul>
+        <div style="margin-top:1.5rem">
+          <a href="https://github.com/shivpathakvw/springinsight/issues/1" class="btn-secondary" style="font-size:.85rem;padding:.6rem 1.2rem;width:100%;justify-content:center" target="_blank">
+            Join Waitlist
+          </a>
+        </div>
+      </div>
+
+      <div class="price-card">
+        <div class="price-name">Enterprise</div>
+        <div class="price-cost" style="font-size:1.4rem">Custom</div>
+        <div class="price-desc">On-premises deployment, SSO, custom agent SKILL.md files, SLA support.</div>
+        <ul class="price-features">
+          <li>On-prem / air-gapped deployment</li>
+          <li>Custom agent development</li>
+          <li>Bring your own model (Bedrock / Vertex)</li>
+          <li>JIRA / Confluence integration</li>
+          <li>Dedicated support</li>
+        </ul>
+        <div style="margin-top:1.5rem">
+          <a href="mailto:shivchandrapathak@gmail.com?subject=SpringInsight%20Enterprise" class="btn-secondary" style="font-size:.85rem;padding:.6rem 1.2rem;width:100%;justify-content:center">
+            Contact
+          </a>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Quick Start -->
+    <div style="margin-top:3rem">
+      <h3 style="font-weight:700;margin-bottom:1.5rem">Quick Start (3 commands)</h3>
+      <div class="grid-2">
+        <pre><code><span style="color:var(--green)"># 1. Install</span>
+pip install springinsight
+
+<span style="color:var(--green)"># 2. Set your API key</span>
+export ANTHROPIC_API_KEY=sk-ant-...
+<span style="color:var(--text-dim)"># or echo "ANTHROPIC_API_KEY=..." > .env</span>
+
+<span style="color:var(--green)"># 3. Scan a GitHub repo</span>
+springinsight run \
+  https://github.com/spring-petclinic/spring-petclinic
+
+<span style="color:var(--text-dim)"># Or scan a local project</span>
+springinsight init /path/to/your/spring-app
+springinsight run /path/to/your/spring-app</code></pre>
+
+        <pre><code><span style="color:var(--green)"># With Web UI (recommended)</span>
+pip install "springinsight[web]"
+springinsight web --open
+
+<span style="color:var(--text-dim)"># Opens http://localhost:8080
+# Paste any GitHub URL → scan
+# Live SSE progress stream
+# Filterable findings table
+# Persistent scan history</span>
+
+<span style="color:var(--green)"># Run specific agents only</span>
+springinsight run ./app \
+  --agents A02,A04,A14
+
+<span style="color:var(--green)"># Export findings as JSON</span>
+springinsight findings --format json</code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr />
+
+<!-- ── CTA ────────────────────────────────────────────────────────────────── -->
+<section class="section">
+  <div class="container">
+    <div class="cta-banner">
+      <h2>Your Spring Boot app has bugs<br/>you haven't found yet.</h2>
+      <p>15 agents will. In under 60 seconds. For free.</p>
+      <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">
+        <a class="btn-primary" href="#access">pip install springinsight</a>
+        <a class="btn-secondary" href="https://github.com/shivpathakvw/springinsight" target="_blank">★ Star on GitHub</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FOOTER ─────────────────────────────────────────────────────────────── -->
+<footer>
+  <div class="container footer-inner">
+    <span>🍃 SpringInsight · MIT License · by <a href="https://github.com/shivpathakvw" style="color:var(--text-mid)">Shiv Chandra Pathak</a></span>
+    <div class="footer-links">
+      <a href="https://github.com/shivpathakvw/springinsight" target="_blank">GitHub</a>
+      <a href="https://pypi.org/project/springinsight/" target="_blank">PyPI</a>
+      <a href="https://github.com/shivpathakvw/springinsight#readme" target="_blank">Docs</a>
+      <a href="https://github.com/shivpathakvw/springinsight/issues" target="_blank">Issues</a>
+      <a href="https://github.com/shivpathakvw/springinsight/blob/main/CONTRIBUTING.md" target="_blank">Contribute</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

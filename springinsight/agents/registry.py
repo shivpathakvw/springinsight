@@ -113,6 +113,19 @@ AGENT_REGISTRY: dict[str, AgentMeta] = {
         description="@Transactional correctness, @Async safety, locking patterns.",
     ),
 
+    # ── Phase 2: Additional analysis agents ───────────────────────────────
+    "A15": AgentMeta(
+        id="A15",
+        name="Dependency Graph",
+        model="claude-sonnet-4-6",
+        phase=2,
+        skill_file="a15-dependency-graph/SKILL.md",
+        description=(
+            "Builds import + Spring bean wiring graph, detects circular deps, "
+            "hot spots, God classes. Outputs Mermaid diagrams and JSON model."
+        ),
+    ),
+
     # ── Phase 3: Opus + generation agents ──────────────────────────────────
     "A05": AgentMeta(
         id="A05",
@@ -164,7 +177,7 @@ AGENT_REGISTRY: dict[str, AgentMeta] = {
 }
 
 # Ordered list for phase-based execution
-PHASE_ORDER = {1: ["A03", "A10", "A12"], 2: ["A01", "A02", "A04", "A09", "A11", "A13", "A14"], 3: ["A05", "A08"], 4: ["A06", "A07"]}
+PHASE_ORDER = {1: ["A03", "A10", "A12"], 2: ["A01", "A02", "A04", "A09", "A11", "A13", "A14", "A15"], 3: ["A05", "A08"], 4: ["A06", "A07"]}
 
 
 def get_agent(agent_id: str) -> AgentMeta | None:
@@ -179,8 +192,24 @@ def get_enabled_agents(requested: list[str] | str = "all") -> list[AgentMeta]:
 
 
 def resolve_skill_path(agent: AgentMeta) -> Path:
-    """Resolve the absolute path to the agent's SKILL.md."""
-    # Skills are bundled alongside the package
-    pkg_dir = Path(__file__).parent.parent.parent  # springinsight project root
-    skill_path = pkg_dir / "skills" / agent.skill_file
-    return skill_path
+    """Resolve the absolute path to the agent's SKILL.md.
+
+    Resolution order:
+    1. User-customized: ~/.springinsight/skills/<skill_file>
+    2. Installed package: <package>/skills/<skill_file>  (pip install)
+    3. Development repo root: <repo>/skills/<skill_file>  (editable install / clone)
+    """
+    # 1 — user override (allows custom / patched SKILL.md files)
+    user_override = Path.home() / ".springinsight" / "skills" / agent.skill_file
+    if user_override.exists():
+        return user_override
+
+    # 2 — installed package: skills/ lives inside springinsight/ package directory
+    #     This is the layout when installed via `pip install springinsight`
+    pkg_internal = Path(__file__).parent.parent / "skills" / agent.skill_file
+    if pkg_internal.exists():
+        return pkg_internal
+
+    # 3 — editable install / cloned repo: skills/ at project root
+    repo_skills = Path(__file__).parent.parent.parent / "skills" / agent.skill_file
+    return repo_skills

@@ -4,21 +4,36 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "springinsight"
-version = "0.1.0"
+version = "0.2.0"
 description = "Autonomous multi-agent codebase intelligence for Java / Spring Boot"
 readme = "README.md"
 requires-python = ">=3.10"
-license = "MIT"
-keywords = ["spring-boot", "java", "code-review", "security", "agents", "llm"]
+license = {text = "MIT"}
+authors = [
+    {name = "Shiv Chandra Pathak", email = "shivchandrapathak@gmail.com"},
+]
+maintainers = [
+    {name = "Shiv Chandra Pathak", email = "shivchandrapathak@gmail.com"},
+]
+keywords = [
+    "spring-boot", "java", "code-review", "security", "agents", "llm",
+    "static-analysis", "cve", "owasp", "dependency-graph", "devtools",
+]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Environment :: Console",
     "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
     "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
 dependencies = [
@@ -64,6 +79,13 @@ all = [
 [project.scripts]
 springinsight = "springinsight.main:cli"
 
+[project.urls]
+Homepage = "https://shivpathakvw.github.io/springinsight"
+Documentation = "https://github.com/shivpathakvw/springinsight#readme"
+Repository = "https://github.com/shivpathakvw/springinsight"
+"Bug Tracker" = "https://github.com/shivpathakvw/springinsight/issues"
+Changelog = "https://github.com/shivpathakvw/springinsight/releases"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["springinsight*"]
@@ -73,6 +95,7 @@ include = ["springinsight*"]
     "skills/**/*.md",
     "skills/**/*.yaml",
     "web/templates/*.html",
+    "web/static/**/*",
 ]
 
 [tool.ruff]

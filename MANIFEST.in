@@ -1,0 +1,11 @@
+recursive-include skills *.md *.yaml *.yml
+recursive-include springinsight/web/templates *.html
+recursive-include springinsight/web/static *
+include README.md
+include LICENSE
+include CONTRIBUTING.md
+exclude .env
+exclude .env.*
+prune .github
+prune tests
+prune docs

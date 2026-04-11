@@ -1,0 +1,161 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*.*.*"    # triggers on v0.2.0, v1.0.0, etc.
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Publish target"
+        required: true
+        default: "testpypi"
+        type: choice
+        options:
+          - testpypi
+          - pypi
+
+jobs:
+  # ── 1. Run tests first ─────────────────────────────────────────────────────
+  test:
+    name: Test before publish
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install with dev deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check springinsight/
+
+      - name: Run tests
+        run: pytest tests/ -x -q
+
+  # ── 2. Build distribution ──────────────────────────────────────────────────
+  build:
+    name: Build wheel + sdist
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: python -m pip install build twine
+
+      - name: Build
+        run: python -m build
+
+      - name: Check dist
+        run: twine check dist/*
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  # ── 3a. Publish to TestPyPI (manual trigger or all tags) ──────────────────
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/springinsight
+    permissions:
+      id-token: write   # OIDC trusted publishing
+    if: >
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.target == 'testpypi'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  # ── 3b. Publish to PyPI (on version tag push) ─────────────────────────────
+  publish-pypi:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/springinsight
+    permissions:
+      id-token: write   # OIDC trusted publishing — no API token needed
+    if: >
+      github.event_name == 'push' &&
+      startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  # ── 4. Create GitHub Release with changelog ───────────────────────────────
+  release:
+    name: Create GitHub Release
+    needs: publish-pypi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Extract tag version
+        id: tag
+        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: SpringInsight ${{ github.ref_name }}
+          body: |
+            ## SpringInsight ${{ github.ref_name }}
+
+            ### Install
+            ```bash
+            pip install springinsight==${{ steps.tag.outputs.version }}
+            # or with Web UI:
+            pip install "springinsight[web]==${{ steps.tag.outputs.version }}"
+            ```
+
+            ### Full changelog
+            See [CHANGELOG.md](https://github.com/shivpathakvw/springinsight/blob/main/CHANGELOG.md)
+            or compare: https://github.com/shivpathakvw/springinsight/compare/...
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+          files: dist/*
