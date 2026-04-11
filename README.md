@@ -1,7 +1,7 @@
 # 🍃 SpringInsight
 
 > **Autonomous multi-agent codebase intelligence for Java & Spring Boot.**  
-> 15 AI agents. 4 interfaces. Find what code reviews miss.
+> 17 AI agents. 4 interfaces. Find what code reviews miss.
 
 SpringInsight runs a fleet of AI agents over your Spring Boot project — simultaneously scanning for CVEs, dead code, security misconfigurations, N+1 queries, race conditions, API design violations, and more — then delivers actionable, prioritised findings with exact fix recommendations.
 
@@ -23,9 +23,12 @@ Modern Spring Boot projects accumulate technical debt faster than manual reviews
 - 🏗️ **Architecture** — SOLID violations, circular dependencies, layering antipatterns
 - 🗑️ **Dead Code** — Spring-aware unused class/method detection (never false-positives on `@Bean` or `@EventListener`)
 - ⚙️ **Config Review** — DDL-auto dangers, debug mode in production, Docker/CI/CD misconfigs
+- 🚀 **NFR Optimizer** *(new)* — concurrency, caching, HikariCP tuning, virtual threads, GC, startup time
+- ⬆️ **Upgrade Advisor** *(new)* — detects deprecated APIs for Spring Boot 3.5 / 4.0, step-by-step migration plan
 - 📋 **Project Context** — inject custom rules into every agent ("no field injection", "all endpoints need @PreAuthorize")
-- 🔍 **GitHub PR Scanning** — auto-scan PRs and post findings as comments
-- 📄 **PDF Export** — full scan reports as professional PDFs
+- 🔍 **GitHub PR Scanning** — scans only changed files (focused, fast), auto-posts findings as PR comments
+- 📦 **Large Project Support** — auto-detects >1k file projects, splits into intelligent batches (maven/gradle/package)
+- 📄 **PDF Export** — full scan reports as professional PDFs from any page
 
 ---
 
@@ -55,7 +58,9 @@ springinsight/
 │   ├── A11  Performance Analyzer
 │   ├── A13  API Design Auditor
 │   ├── A14  Concurrency & Transaction Audit
-│   └── A15  Dependency Graph
+│   ├── A15  Dependency Graph
+│   ├── A16  Spring Boot Upgrade Advisor  ← NEW
+│   └── A17  NFR Optimizer                ← NEW
 │
 └── Phase 3/4 (claude-opus/sonnet) — synthesis & generation (~$2+)
     ├── A05  Architecture Review
@@ -418,6 +423,122 @@ Global rules (apply to all projects) are stored at `~/.springinsight/global-cont
 
 ---
 
+## Spring Boot Version Support
+
+SpringInsight supports **Spring Boot 2.7 through 4.0** and auto-detects the version from your `pom.xml` or `build.gradle` — no manual configuration needed.
+
+| Version | Status | Notes |
+|---------|--------|-------|
+| 2.7.x | EOL | Detects `javax.*` → `jakarta.*` migration needs |
+| 3.0.x / 3.1.x | EOL | Flags `WebSecurityConfigurerAdapter` removal, property renames |
+| 3.2.x | Maintenance | Virtual threads preview (`spring.threads.virtual.enabled`) |
+| 3.3.x | Maintenance | CDS support, `@ConditionalOnThreading` |
+| 3.4.x | Stable | RestClient GA, Micrometer 1.14 |
+| **3.5.x** | ✅ **Latest 3.x** | Structured logging, `applicationTaskExecutor` rename, heapdump access=NONE |
+| **4.0.x** | Next major | Jakarta EE 11, Spring Framework 7, `spring-boot-parent` removed |
+
+Version-specific guidance is automatically injected into every agent's context so findings are always relevant to your actual version. The **A16 Spring Boot Upgrade Advisor** agent produces a full migration plan with effort estimates when you're ready to upgrade.
+
+```bash
+# Set version explicitly (or let SpringInsight auto-detect from pom.xml)
+springinsight context set spring-boot 3.5.x
+```
+
+---
+
+## Large Project Support (Batch Scanning)
+
+For projects with **1,000+ Java files**, SpringInsight automatically detects the size and offers intelligent batch scanning to prevent timeouts and memory issues.
+
+```
+⚠ Large project detected — 2,847 Java files
+  Recommended: Split into 12 batches using maven strategy
+  
+  Batch 1: payments-service       (143 files)
+  Batch 2: user-service           (98 files)
+  Batch 3: order-service          (201 files)
+  ...
+```
+
+**Splitting strategies** (chosen automatically in priority order):
+
+| Strategy | When used | How it splits |
+|----------|-----------|---------------|
+| `maven` | Multi-module Maven project | One batch per `<module>` |
+| `gradle` | Multi-module Gradle project | One batch per subproject |
+| `dir` | Single module, many packages | One batch per top-level source directory |
+| `package` | Dense single package tree | Groups Java packages by file count |
+| `slice` | Anything else | Fixed file-count windows (150 files each) |
+
+Batches run **sequentially** (one at a time) to avoid memory overload. Each batch creates its own live scan page with SSE progress. Results are aggregated into a single overall score and findings list.
+
+**Web UI**: the dashboard detects large projects on URL blur and shows the batch plan before you start. Click **Start Batch Scan (Recommended)** to begin.
+
+**CLI**:
+```bash
+# Auto-batch if >1000 files; runs all batches sequentially
+springinsight run /path/to/large-project --batch
+
+# Override batch size
+springinsight run /path/to/large-project --batch --batch-size 100
+```
+
+---
+
+## GitHub PR Scanning — Focused Mode
+
+PR scans now only analyse the **changed files** in the PR, not the entire codebase. This makes PR scans dramatically faster and prevents noise from unrelated code.
+
+- **Changed files only** — agents receive a strict scope block listing only the files modified in the PR
+- **Focused agent set** — only PR-relevant agents run (A01, A02, A03, A04, A09, A11, A12, A13, A14). Full-project agents (LLD, Architecture, Dead Code, Docs) are skipped.
+- **Removed files** — files deleted in the PR are noted but not scanned
+- **Live progress** — scanning redirects to the standard live scan page with SSE agent progress
+
+```bash
+# Scan a specific PR (only changed Java files)
+springinsight github scan-pr https://github.com/myorg/service/pull/42
+
+# From the Web UI: Dashboard → Scan PR tab → paste PR URL → Scan PR
+```
+
+---
+
+## New Agents: A16 & A17
+
+### A16 — Spring Boot Upgrade Advisor
+
+Reads your `pom.xml`, scans all Java source files for deprecated/removed APIs, and produces a step-by-step migration guide.
+
+**What it catches:**
+- `WebSecurityConfigurerAdapter` usage (removed in 3.0)
+- `javax.*` imports that need `jakarta.*` migration
+- `spring.redis.*` → `spring.data.redis.*` property renames
+- `RestTemplate` usage (recommend RestClient/WebClient for new code)
+- `taskExecutor` bean name → `applicationTaskExecutor` (3.5 breaking change)
+- `heapdump` actuator endpoint now requires explicit opt-in (3.5)
+- `spring-boot-parent` POM removal (4.0)
+- Spring Cloud / Spring Security compatibility matrix violations
+
+**Output:** prioritised migration table (MUST-FIX / SHOULD-FIX / QUICK-WINS) with exact file locations, before/after code snippets, and effort estimates.
+
+### A17 — NFR Optimizer
+
+Covers seven non-functional requirement pillars with concrete, measurable fixes.
+
+| Pillar | Key findings |
+|--------|-------------|
+| **Concurrency** | `@Async` self-invocation, unbounded thread pools, virtual thread pinning, `HashMap` in singleton beans |
+| **Caching** | Missing `@Cacheable` on hot paths, Redis cache without TTL, `ConcurrentMapCacheManager` (no eviction) |
+| **DB / Connections** | HikariCP not tuned, N+1 via `FetchType.EAGER`, no pagination on `findAll()`, long transactions with I/O |
+| **Memory / GC** | `ThreadLocal` leaks, unbounded static collections, `open-in-view=true` (flagged HIGH always) |
+| **Startup** | Over-broad `@ComponentScan`, heavy `CommandLineRunner`, missing `lazy-initialization` |
+| **Observability** | Missing `@Timed`, no MDC correlation ID, `log.debug()` without guard |
+| **Resilience** | No circuit breaker on external calls, unbounded async queues, missing retry backoff |
+
+> 💡 `spring.jpa.open-in-view=true` (Spring Boot's default) is always flagged **HIGH** — it holds a Hibernate session open for the entire HTTP request lifetime and is the single most common cause of performance problems in Spring Boot apps.
+
+---
+
 ## Agents Reference
 
 | ID  | Agent | Model | Phase | What it finds |
@@ -433,6 +554,8 @@ Global rules (apply to all projects) are stored at `~/.springinsight/global-cont
 | A13 | API Design Auditor | Sonnet | 2 | REST compliance, @Valid missing, pagination, OpenAPI gaps |
 | A14 | Concurrency Audit | Sonnet | 2 | Race conditions, @Transactional correctness, ThreadLocal leaks |
 | A15 | Dependency Graph | Sonnet | 2 | Circular deps, hot-spots, God classes, Mermaid diagrams |
+| **A16** | **Spring Boot Upgrade Advisor** ⭐ | Sonnet | 2 | Deprecated APIs, migration plan 3.2→3.5→4.0, effort estimates |
+| **A17** | **NFR Optimizer** ⭐ | Sonnet | 2 | Thread pools, caching TTL, HikariCP, virtual threads, GC tuning |
 | A05 | Architecture Review | Opus | 3 | SOLID violations at architecture level, coupling matrix, ADRs |
 | A08 | LLD Generator | Opus | 3 | Class diagrams, ER diagrams, sequence diagrams (Mermaid) |
 | A06 | Test Generator | Sonnet | 4 | JUnit 5 + Mockito, @WebMvcTest, @DataJpaTest, security tests |
@@ -491,7 +614,7 @@ springinsight github     GitHub PR integration
 springinsight mcp        Start the MCP server (for Claude Code / Cursor / Cline)
 springinsight findings   List findings with severity/agent filters
 springinsight history    Show run history table with scores
-springinsight agents     List all 15 agents with phase and status
+springinsight agents     List all 17 agents with phase and status
 springinsight init       Initialise project context (creates context.yaml)
 ```
 

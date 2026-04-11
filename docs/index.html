@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SpringInsight — Autonomous Code Intelligence for Spring Boot</title>
-  <meta name="description" content="Scan any Spring Boot codebase in seconds. 15 AI agents find CVEs, security holes, N+1 queries, race conditions, and dead code — powered by Claude." />
+  <meta name="description" content="Scan any Spring Boot codebase in seconds. 17 AI agents find CVEs, security holes, N+1 queries, race conditions, dead code, NFR bottlenecks and upgrade blockers — powered by Claude." />
   <meta name="author" content="Shiv Chandra Pathak" />
   <meta property="og:title" content="SpringInsight — Autonomous Code Intelligence for Spring Boot" />
-  <meta property="og:description" content="15 AI agents. 3 intelligence tiers. Find critical issues in any Spring Boot repo in under 60 seconds." />
+  <meta property="og:description" content="17 AI agents. Spring Boot 2.7–4.0. Large project batch scanning. Find critical issues in any Spring Boot repo in under 60 seconds." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://springinsight.vercel.app" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -490,15 +490,16 @@
   <div class="container">
     <div class="hero-eyebrow">
       <span>✦</span>
-      <span>Open Source · MIT · v0.2.0</span>
+      <span>Open Source · MIT · v0.5.0</span>
     </div>
 
     <h1 class="hero-title">
       Understand any <em>Spring Boot</em><br/>codebase in seconds
     </h1>
     <p class="hero-sub">
-      15 AI agents scan your Java project for CVEs, OWASP Top 10 vulnerabilities, N+1 queries,
-      race conditions, dead code, and architectural debt — in one command.
+      17 AI agents scan your Java project for CVEs, OWASP Top 10 vulnerabilities, N+1 queries,
+      race conditions, dead code, NFR bottlenecks, and Spring Boot upgrade blockers — in one command.
+      Supports Spring Boot 2.7 through 4.0 with auto-version detection.
     </p>
 
     <div class="hero-ctas">
@@ -517,12 +518,12 @@
 
     <div class="hero-stats">
       <div class="hero-stat">
-        <div class="hero-stat-num">15</div>
+        <div class="hero-stat-num">17</div>
         <div class="hero-stat-label">AI agents</div>
       </div>
       <div class="hero-stat">
-        <div class="hero-stat-num">3</div>
-        <div class="hero-stat-label">intelligence tiers</div>
+        <div class="hero-stat-num">3.5/4.0</div>
+        <div class="hero-stat-label">Spring Boot</div>
       </div>
       <div class="hero-stat">
         <div class="hero-stat-num">&lt;60s</div>
@@ -585,7 +586,7 @@
         <pre><code><span style="color:var(--green)">$</span> springinsight run https://github.com/acme/orders-service
 
 <span style="color:var(--text-dim)">Cloning repository...</span>
-<span style="color:var(--text-dim)">Loaded context: orders-service (15 modules)</span>
+<span style="color:var(--text-dim)">Detected: Spring Boot 3.5.1 · Java 21 · Maven · 17 agents ready</span>
 
 <span style="color:var(--green)">Phase 1 — Haiku (fast scan)</span>
   ✅  A03  CVE & License Scanner    <span style="color:var(--text-dim)">3.2s</span>
@@ -601,8 +602,10 @@
   ✅  A13  API Design Auditor       <span style="color:var(--text-dim)">12s</span>
   ✅  A14  Concurrency Audit        <span style="color:var(--text-dim)">15s</span>
   ✅  A15  Dependency Graph         <span style="color:var(--text-dim)">11s</span>
+  ✅  A16  Upgrade Advisor          <span style="color:var(--text-dim)">13s  [3.5→4.0 migration: 4 blockers found]</span>
+  ✅  A17  NFR Optimizer            <span style="color:var(--text-dim)">17s  [open-in-view=true flagged HIGH]</span>
 
-<span style="color:var(--red)">CRITICAL  2</span>  <span style="color:var(--orange)">HIGH  11</span>  <span style="color:var(--yellow)">MEDIUM  34</span>  LOW  18
+<span style="color:var(--red)">CRITICAL  2</span>  <span style="color:var(--orange)">HIGH  14</span>  <span style="color:var(--yellow)">MEDIUM  38</span>  LOW  22
 
 <span style="color:var(--text-dim)">Report: .springinsight/reports/2026-04-11_orders-service.md</span>
 <span style="color:var(--text-dim)">Run `springinsight web` to explore findings in the browser.</span></code></pre>
@@ -696,13 +699,23 @@
             <div class="agent-name">Dependency Graph</div>
             <div class="agent-desc">Import + Spring bean wiring graph. Circular dependency detection, hot-spot ranking by in-degree, God class detection. Mermaid diagram output.</div>
           </div>
+          <div class="agent-item" style="border:1px solid rgba(168,85,247,.35);border-radius:8px;background:rgba(168,85,247,.05);">
+            <div class="agent-id" style="background:rgba(168,85,247,.2);color:#c084fc;">A16</div>
+            <div class="agent-name">Spring Boot Upgrade Advisor <span style="font-size:.65rem;background:rgba(168,85,247,.2);color:#c084fc;padding:1px 6px;border-radius:4px;margin-left:4px;">NEW</span></div>
+            <div class="agent-desc">Detects deprecated and removed APIs for 3.2 → 3.5 → 4.0 migrations. Produces a step-by-step migration plan with file locations, before/after snippets, and effort estimates. Knows about <code>WebSecurityConfigurerAdapter</code> removal, <code>jakarta.*</code> migration, property renames, and Spring Boot 4.0 breaking changes.</div>
+          </div>
+          <div class="agent-item" style="border:1px solid rgba(168,85,247,.35);border-radius:8px;background:rgba(168,85,247,.05);">
+            <div class="agent-id" style="background:rgba(168,85,247,.2);color:#c084fc;">A17</div>
+            <div class="agent-name">NFR Optimizer <span style="font-size:.65rem;background:rgba(168,85,247,.2);color:#c084fc;padding:1px 6px;border-radius:4px;margin-left:4px;">NEW</span></div>
+            <div class="agent-desc">7 NFR pillars: concurrency (unbounded thread pools, virtual thread pinning), caching (missing TTL, no @Cacheable on hot paths), HikariCP tuning, memory leaks, startup time, observability (missing @Timed, no MDC), and resilience (no circuit breaker). Always flags <code>spring.jpa.open-in-view=true</code> as HIGH severity.</div>
+          </div>
         </div>
       </div>
 
-      <!-- Phase 3 coming soon -->
-      <div class="agent-row" style="opacity:.65">
+      <!-- Phase 3 -->
+      <div class="agent-row" style="opacity:.75">
         <div class="phase-header">
-          <span class="phase-badge phase-3">Phase 3 — Coming Soon</span>
+          <span class="phase-badge phase-3">Phase 3</span>
           <span class="phase-model">claude-opus · generation</span>
         </div>
         <div class="agents-list">
@@ -1107,7 +1120,7 @@ springinsight github scan-pr https://github.com/org/repo/pull/42</code></pre>
         <div class="price-cost">Free <span>forever</span></div>
         <div class="price-desc">Full feature set. Runs on your machine. Code never leaves your infrastructure.</div>
         <ul class="price-features">
-          <li>All 15 agents across 4 phases</li>
+          <li>All 17 agents across 4 phases</li>
           <li>CLI + Web UI + MCP Server + VS Code extension</li>
           <li>Agent enable/disable, budget cap, pre-scan cost estimate</li>
           <li>Smart file scoping + incremental scanning (80–90% token savings on re-scans)</li>
@@ -1210,7 +1223,7 @@ springinsight findings --format json</code></pre>
   <div class="container">
     <div class="cta-banner">
       <h2>Your Spring Boot app has bugs<br/>you haven't found yet.</h2>
-      <p>15 agents will. In under 60 seconds. For free.</p>
+      <p>17 agents will. In under 60 seconds. For free.</p>
       <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">
         <a class="btn-primary" href="#access">pip install springinsight</a>
         <a class="btn-secondary" href="https://github.com/shivpathakvw/springinsight" target="_blank">★ Star on GitHub</a>

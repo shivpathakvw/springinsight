@@ -29,10 +29,24 @@
           {% if run.completed_at %}· Completed {{ run.completed_at.strftime('%H:%M') }}{% endif %}
         </div>
       </div>
-      <span class="badge badge-{{ 'green' if run.status == 'complete' else 'red' }}" style="font-size:12px;">
-        {{ '✓ Complete' if run.status == 'complete' else '✗ Failed' }}
-      </span>
+      <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+        <span class="badge badge-{{ 'green' if run.status == 'complete' else 'red' }}" style="font-size:12px;">
+          {{ '✓ Complete' if run.status == 'complete' else '✗ Failed' }}
+        </span>
+        <!-- PDF Export button -->
+        <button @click="exportPdf()"
+                :disabled="pdfExporting"
+                style="display:inline-flex; align-items:center; gap:6px; background:transparent; border:1px solid var(--border); color:var(--muted); border-radius:7px; padding:8px 14px; font-size:13px; cursor:pointer; transition:all 0.15s; white-space:nowrap;"
+                onmouseover="if(!this.disabled){this.style.borderColor='var(--orange)';this.style.color='var(--orange)'}"
+                onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+          <svg x-show="!pdfExporting" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <svg x-show="pdfExporting" x-cloak width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite;"><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>
+          <span x-text="pdfExporting ? 'Generating…' : 'Export PDF'"></span>
+        </button>
+      </div>
     </div>
+    <!-- PDF error banner -->
+    <div x-show="pdfError" x-cloak style="margin-top:10px; padding:10px 14px; background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.2); border-radius:6px; color:#f87171; font-size:12px;" x-text="pdfError"></div>
   </div>
 
   <!-- ── Score dashboard ── -->
@@ -223,11 +237,58 @@
 
 </div>
 
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+[x-cloak] { display: none !important; }
+</style>
+
 <script>
 function report() {
+  const RUN_ID = '{{ run.id }}';
   return {
     filterSev: '',
     filterAgent: '',
+    pdfExporting: false,
+    pdfError: '',
+
+    async exportPdf() {
+      this.pdfExporting = true;
+      this.pdfError = '';
+      try {
+        const res = await fetch(`/api/runs/${RUN_ID}/export/pdf`);
+        if (!res.ok) {
+          let msg = `PDF export failed (${res.status})`;
+          try {
+            const err = await res.json();
+            if (err.detail) msg = err.detail;
+          } catch(e) {}
+          if (res.status === 501) {
+            msg = 'PDF export requires reportlab. Run: pip install "springinsight[pdf]"';
+          }
+          this.pdfError = msg;
+          return;
+        }
+        const ct = res.headers.get('content-type') || '';
+        if (!ct.includes('pdf')) {
+          this.pdfError = 'Server returned unexpected content. Is reportlab installed?';
+          return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const cd = res.headers.get('content-disposition') || '';
+        const match = cd.match(/filename="?([^";]+)"?/);
+        a.download = match ? match[1] : `springinsight-${RUN_ID}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+      } catch(e) {
+        this.pdfError = 'Network error: ' + e.message;
+      } finally {
+        this.pdfExporting = false;
+      }
+    },
   };
 }
 </script>
