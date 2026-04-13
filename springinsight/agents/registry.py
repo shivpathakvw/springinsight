@@ -183,6 +183,24 @@ AGENT_REGISTRY: dict[str, AgentMeta] = {
         description="Git diff analysis, blast radius, breaking change detection.",
     ),
 
+    # ── Phase 3: Reverse Engineering ──────────────────────────────────────
+    "A18": AgentMeta(
+        id="A18",
+        name="Reverse Engineering",
+        model="claude-opus-4-6",
+        phase=3,
+        skill_file="a18-reverse-engineer/SKILL.md",
+        description=(
+            "Reads the codebase and produces structured documentation explaining what "
+            "the application does and how it works. Two modes: 'high-level' (feature "
+            "catalogue, module map, integration inventory — for architects and new joiners) "
+            "and 'in-depth' (full call graphs, transaction traces, Mermaid sequence diagrams, "
+            "event flows, config deep-dive — for senior engineers and auditors). "
+            "Also flags documentation gaps and transaction safety issues."
+        ),
+        requires=["A01", "A04"],  # benefits from code review + DB analysis context
+    ),
+
     # ── Phase 2: Enterprise / NFR agents ──────────────────────────────────
     "A16": AgentMeta(
         id="A16",
@@ -217,7 +235,7 @@ AGENT_REGISTRY: dict[str, AgentMeta] = {
 PHASE_ORDER = {
     1: ["A03", "A10", "A12"],
     2: ["A01", "A02", "A04", "A09", "A11", "A13", "A14", "A15", "A16", "A17"],
-    3: ["A05", "A08"],
+    3: ["A05", "A08", "A18"],
     4: ["A06", "A07"],
 }
 

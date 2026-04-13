@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+{% block title %}SpringInsight — Reverse Engineering{% endblock %}
+{% block nav_reverse %}active{% endblock %}
+
+{% block content %}
+<div style="padding:36px 40px; max-width:900px;" x-data="reverseEng()">
+
+  <!-- Page header -->
+  <div style="margin-bottom:32px;">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+      <h1 style="font-size:22px; font-weight:700; color:var(--text); margin:0;">Reverse Engineering</h1>
+      <span style="font-size:10px; font-weight:700; background:rgba(168,85,247,.15); color:#a855f7; border:1px solid rgba(168,85,247,.3); padding:2px 8px; border-radius:10px; letter-spacing:0.06em;">A18 · OPUS</span>
+    </div>
+    <p style="color:var(--muted); margin:0; font-size:13px; line-height:1.6;">
+      Understand any Spring Boot codebase without reading source code. Choose your depth — high-level gives a feature map and integration inventory; in-depth traces every endpoint through the full call graph with sequence diagrams.
+    </p>
+  </div>
+
+  <!-- ── Mode picker ── -->
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:28px;">
+
+    <div @click="mode='high-level'"
+         :style="mode==='high-level' ? 'border-color:rgba(168,85,247,.6); background:rgba(168,85,247,.06);' : ''"
+         style="border:1px solid var(--border); border-radius:12px; padding:20px; cursor:pointer; transition:all .15s;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+        <div :style="mode==='high-level' ? 'background:rgba(168,85,247,.2); border-color:rgba(168,85,247,.4);' : 'background:rgba(255,255,255,.05); border-color:var(--border);'"
+             style="width:32px; height:32px; border-radius:8px; border:1px solid; display:flex; align-items:center; justify-content:center; font-size:16px;">🗺️</div>
+        <div>
+          <div style="font-weight:700; font-size:14px;" :style="mode==='high-level' ? 'color:#a855f7;' : 'color:var(--text);'">High-Level</div>
+          <div style="font-size:11px; color:var(--muted);">~3–5 pages · Fast</div>
+        </div>
+        <div x-show="mode==='high-level'" style="margin-left:auto; color:#a855f7;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+      </div>
+      <ul style="margin:0; padding-left:16px; font-size:12px; color:var(--muted); line-height:1.8;">
+        <li>Feature catalogue &amp; module map</li>
+        <li>REST API surface table</li>
+        <li>Spring bean wiring summary</li>
+        <li>Integration inventory (Feign, Kafka, Redis)</li>
+        <li>Data model overview</li>
+      </ul>
+      <div style="margin-top:10px; font-size:11px; color:var(--muted); font-style:italic;">Best for: architects, new joiners, tech leads</div>
+    </div>
+
+    <div @click="mode='in-depth'"
+         :style="mode==='in-depth' ? 'border-color:rgba(249,115,22,.6); background:rgba(249,115,22,.04);' : ''"
+         style="border:1px solid var(--border); border-radius:12px; padding:20px; cursor:pointer; transition:all .15s;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+        <div :style="mode==='in-depth' ? 'background:rgba(249,115,22,.15); border-color:rgba(249,115,22,.4);' : 'background:rgba(255,255,255,.05); border-color:var(--border);'"
+             style="width:32px; height:32px; border-radius:8px; border:1px solid; display:flex; align-items:center; justify-content:center; font-size:16px;">🔬</div>
+        <div>
+          <div style="font-weight:700; font-size:14px;" :style="mode==='in-depth' ? 'color:#f97316;' : 'color:var(--text);'">In-Depth</div>
+          <div style="font-size:11px; color:var(--muted);">~15–40 pages · Thorough</div>
+        </div>
+        <div x-show="mode==='in-depth'" style="margin-left:auto; color:#f97316;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+      </div>
+      <ul style="margin:0; padding-left:16px; font-size:12px; color:var(--muted); line-height:1.8;">
+        <li>Full call graphs per endpoint</li>
+        <li>@Transactional boundary analysis</li>
+        <li>Mermaid sequence diagrams</li>
+        <li>Event flow &amp; async task docs</li>
+        <li>Exception handling chains</li>
+      </ul>
+      <div style="margin-top:10px; font-size:11px; color:var(--muted); font-style:italic;">Best for: senior devs, code reviewers, auditors</div>
+    </div>
+
+  </div>
+
+  <!-- ── Inputs ── -->
+  <div class="card" style="padding:24px; margin-bottom:24px;">
+
+    <div style="margin-bottom:16px;">
+      <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:8px;">
+        GitHub Repository URL or Local Path
+      </label>
+      <input
+        x-model="repoUrl"
+        type="text"
+        placeholder="https://github.com/owner/my-spring-app  or  /Users/me/projects/api-service"
+        class="si-input"
+        :disabled="running"
+      >
+    </div>
+
+    <!-- Focus target (in-depth only) -->
+    <div x-show="mode==='in-depth'" style="margin-bottom:16px;">
+      <label style="display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:8px;">
+        Focus Target <span style="font-weight:400; text-transform:none; letter-spacing:0;">(optional — restrict to a class, package, or endpoint)</span>
+      </label>
+      <input
+        x-model="focus"
+        type="text"
+        placeholder="OrderService   or   com.example.orders   or   POST /api/orders"
+        class="si-input"
+        :disabled="running"
+      >
+      <div style="margin-top:6px; font-size:11px; color:var(--muted);">
+        Leave empty to analyse the full project. Providing a target is recommended for large codebases.
+      </div>
+    </div>
+
+    <button
+      @click="startAnalysis()"
+      :disabled="running || !repoUrl.trim()"
+      style="padding:10px 24px; font-size:13px; font-weight:700; border-radius:8px; border:none; cursor:pointer; display:flex; align-items:center; gap:8px; transition:all .15s;"
+      :style="running ? 'background:rgba(168,85,247,.3); color:#a855f7; cursor:not-allowed;' : 'background:#a855f7; color:#fff;'">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" x-show="!running"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" x-show="running" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+      <span x-text="running ? 'Analysing…' : 'Start ' + (mode === 'high-level' ? 'High-Level' : 'In-Depth') + ' Analysis'"></span>
+    </button>
+
+  </div>
+
+  <!-- ── Progress / Live log ── -->
+  <div x-show="running || logs.length" style="margin-bottom:24px;">
+    <div class="card" style="padding:0; overflow:hidden;">
+      <div style="padding:12px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; background:rgba(168,85,247,.04);">
+        <span x-show="running" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#a855f7; animation:pulse 1s ease-in-out infinite;"></span>
+        <span x-show="!running && status==='complete'" style="color:var(--green); font-size:13px;">✅</span>
+        <span x-show="!running && status==='failed'" style="color:var(--red); font-size:13px;">❌</span>
+        <span style="font-size:12px; font-weight:600; color:var(--text);">
+          A18 — Reverse Engineering
+        </span>
+        <span style="font-size:11px; color:var(--muted); margin-left:auto;" x-text="elapsed > 0 ? elapsed + 's elapsed' : ''"></span>
+      </div>
+      <div style="padding:12px 16px; font-family:var(--mono, monospace); font-size:12px; color:var(--muted); max-height:180px; overflow-y:auto; line-height:1.7;" id="reverse-log">
+        <template x-for="line in logs">
+          <div x-text="'› ' + line"></div>
+        </template>
+        <div x-show="running && !logs.length" style="color:var(--muted);">› Starting analysis…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Result ── -->
+  <div x-show="result" style="margin-bottom:24px;">
+    <div class="card" style="padding:24px;">
+      <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+        <span style="font-size:20px;">📄</span>
+        <div>
+          <div style="font-weight:700; font-size:15px; color:var(--text);" x-text="result?.doc_title || 'Documentation Ready'"></div>
+          <div style="font-size:12px; color:var(--muted);" x-text="result?.summary"></div>
+        </div>
+      </div>
+
+      <!-- Documentation gap findings -->
+      <template x-if="result?.gaps && result.gaps.length">
+        <div style="margin-bottom:16px;">
+          <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:8px;">Documentation Gaps Found</div>
+          <template x-for="gap in result.gaps.slice(0,6)">
+            <div style="padding:8px 12px; border-radius:6px; margin-bottom:6px; border-left:3px solid; display:flex; align-items:flex-start; gap:8px; font-size:12px;"
+                 :style="gap.severity === 'HIGH' ? 'border-color:#ef4444; background:rgba(239,68,68,.06);' : 'border-color:#eab308; background:rgba(234,179,8,.06);'">
+              <span :style="gap.severity === 'HIGH' ? 'color:#ef4444;' : 'color:#eab308;'" x-text="gap.severity" style="font-weight:700; flex-shrink:0;"></span>
+              <span style="color:var(--text-dim);" x-text="(gap.class_name || gap.file || '?') + ' — ' + gap.problem"></span>
+            </div>
+          </template>
+          <div x-show="result.gaps.length > 6" style="font-size:11px; color:var(--muted); padding-left:4px;" x-text="'… and ' + (result.gaps.length - 6) + ' more (see full report)'"></div>
+        </div>
+      </template>
+
+      <!-- Action buttons -->
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <a :href="'/scans/' + result.run_id + '/report'"
+           style="padding:8px 16px; font-size:12px; font-weight:600; background:#a855f7; color:#fff; border-radius:6px; text-decoration:none; display:flex; align-items:center; gap:6px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          View Full Report
+        </a>
+        <a :href="'/api/runs/' + result.run_id + '/export/pdf'" target="_blank"
+           style="padding:8px 16px; font-size:12px; font-weight:600; background:transparent; color:var(--text); border:1px solid var(--border); border-radius:6px; text-decoration:none; display:flex; align-items:center; gap:6px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export PDF
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error banner -->
+  <div x-show="error" style="padding:12px 16px; background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.3); border-radius:8px; color:#f87171; font-size:13px;" x-text="error"></div>
+
+</div>
+
+<style>
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+</style>
+
+<script>
+function reverseEng() {
+  return {
+    mode: 'high-level',
+    repoUrl: '',
+    focus: '',
+    running: false,
+    status: null,
+    logs: [],
+    result: null,
+    error: null,
+    elapsed: 0,
+    _timer: null,
+    _es: null,
+
+    startAnalysis() {
+      if (!this.repoUrl.trim() || this.running) return;
+      this.running = true;
+      this.status = 'running';
+      this.logs = [];
+      this.result = null;
+      this.error = null;
+      this.elapsed = 0;
+
+      // Start elapsed timer
+      this._timer = setInterval(() => { this.elapsed++; }, 1000);
+
+      const params = new URLSearchParams({
+        repo_url: this.repoUrl.trim(),
+        mode: this.mode,
+      });
+      if (this.focus.trim()) params.set('focus', this.focus.trim());
+
+      this._es = new EventSource('/api/reverse/run?' + params.toString());
+
+      this._es.addEventListener('log', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          this.logs.push(data.message);
+          // Auto-scroll log
+          this.$nextTick(() => {
+            const el = document.getElementById('reverse-log');
+            if (el) el.scrollTop = el.scrollHeight;
+          });
+        } catch (_) {}
+      });
+
+      this._es.addEventListener('complete', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          this.status = 'complete';
+          this.running = false;
+          clearInterval(this._timer);
+          this._es.close();
+
+          // Build result summary
+          const infoFindings = (data.findings || []).filter(f => f.severity === 'INFO');
+          const gaps = (data.findings || []).filter(f => ['MEDIUM','HIGH'].includes(f.severity));
+          const featureCount = infoFindings.filter(f => f.subcategory === 'Feature Documented').length;
+
+          this.result = {
+            run_id: data.run_id,
+            doc_title: this.mode === 'high-level' ? '📐 ARCHITECTURE.md generated' : '📖 TECHNICAL-REFERENCE.md generated',
+            summary: `${featureCount} feature(s) documented · ${gaps.length} documentation gap(s) · ${this.elapsed}s`,
+            gaps: gaps,
+          };
+        } catch (_) {}
+      });
+
+      this._es.addEventListener('failed', (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          this.error = 'Analysis failed: ' + (data.error || 'unknown error');
+        } catch (_) {
+          this.error = 'Analysis failed — see logs for details.';
+        }
+        this.status = 'failed';
+        this.running = false;
+        clearInterval(this._timer);
+        this._es.close();
+      });
+
+      this._es.onerror = () => {
+        if (this.running) {
+          this.error = 'Connection lost. Check the server logs.';
+          this.running = false;
+          this.status = 'failed';
+          clearInterval(this._timer);
+        }
+      };
+    },
+  };
+}
+</script>
+{% endblock %}

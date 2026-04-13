@@ -17,6 +17,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from ..agents.registry import AGENT_REGISTRY, get_enabled_agents
+from ..agents.runner import run_agent_async
+
+def get_agent_registry():
+    return AGENT_REGISTRY
 from ..agents.config import (
     get_agents_with_config,
     load_agent_config,
@@ -760,7 +764,15 @@ async def api_stream_run(run_id: str, request: Request):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "0.4.0"}
+    return {"status": "ok", "version": "0.5.0"}
+
+
+# ── Reverse Engineering ───────────────────────────────────────────────────────
+
+@app.get("/reverse", response_class=HTMLResponse)
+async def reverse_page(request: Request):
+    """Reverse Engineering UI — A18 agent launcher."""
+    return templates.TemplateResponse(request, "reverse.html", {})
 
 
 # ── Settings: Project Context ─────────────────────────────────────────────────
@@ -1064,4 +1076,163 @@ async def export_run_pdf(run_id: str, request: Request):
         iter([pdf_bytes]),
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ── Reverse Engineering (A18) ─────────────────────────────────────────────────
+
+@app.get("/api/reverse/run")
+async def reverse_run_stream(
+    repo_url: str,
+    mode: str = "high-level",
+    focus: str = "",
+    request: Request = None,
+):
+    """Stream A18 reverse engineering agent execution via SSE."""
+    import uuid as _uuid
+    from datetime import datetime as _dt
+
+    if mode not in ("high-level", "in-depth"):
+        return JSONResponse({"error": "mode must be high-level or in-depth"}, status_code=400)
+
+    async def _event_stream():
+        run_id = None
+        try:
+            work_path = get_data_dir()
+            ctx = load_global_context()
+
+            # Resolve project
+            try:
+                project_path, source_type, source_url = resolve_project_path(repo_url, work_path)
+            except Exception as e:
+                yield f"event: failed\ndata: {json.dumps({'error': str(e)})}\n\n"
+                return
+
+            yield f"event: log\ndata: {json.dumps({'message': f'Project resolved: {project_path.name}'})}\n\n"
+            yield f"event: log\ndata: {json.dumps({'message': f'Mode: {mode}' + (f' | Target: {focus}' if focus else '')})}\n\n"
+
+            # Build run
+            short_id = str(_uuid.uuid4())[:8]
+            full_run_id = f"{_dt.utcnow().strftime('%Y-%m-%d')}-{short_id}"
+            run_dir = work_path / ".springinsight" / "runs" / full_run_id
+            run_dir.mkdir(parents=True, exist_ok=True)
+            run_id = full_run_id
+
+            # Init DB and create run record
+            init_db(work_path)
+            with get_db() as db:
+                db.add(Run(
+                    id=full_run_id,
+                    project_name=ctx.name,
+                    project_path=str(project_path),
+                    source_type=source_type,
+                    source_url=source_url,
+                    agents_requested=["A18"],
+                    context_snapshot=ctx._raw,
+                ))
+
+            agent = get_agent_registry().get("A18")
+            if not agent:
+                yield f"event: failed\ndata: {json.dumps({'error': 'A18 agent not found in registry'})}\n\n"
+                return
+
+            # Build extra_scope with mode + focus
+            focus_line = f"REVERSE_TARGET  : {focus}" if focus.strip() else "REVERSE_TARGET  : (full project)"
+            extra_scope = (
+                f"REVERSE_MODE    : {mode}\n"
+                f"{focus_line}\n"
+                f"EXPECTED_OUTPUT : {'ARCHITECTURE.md' if mode == 'high-level' else 'TECHNICAL-REFERENCE.md'}"
+            )
+
+            log_queue: asyncio.Queue = asyncio.Queue()
+
+            def log_cb(agent_id: str, msg: str):
+                log_queue.put_nowait(msg)
+
+            # Start agent as background task
+            agent_task = asyncio.create_task(
+                run_agent_async(
+                    agent=agent,
+                    ctx=ctx,
+                    project_path=str(project_path),
+                    run_dir=run_dir,
+                    run_id=full_run_id,
+                    extra_scope=extra_scope,
+                    log_callback=log_cb,
+                    use_file_scope=False,
+                    use_incremental=False,
+                )
+            )
+
+            # Stream log messages while agent runs
+            while not agent_task.done():
+                try:
+                    msg = await asyncio.wait_for(log_queue.get(), timeout=1.0)
+                    yield f"event: log\ndata: {json.dumps({'message': msg})}\n\n"
+                except asyncio.TimeoutError:
+                    yield f"event: log\ndata: {json.dumps({'message': 'Analysing…'})}\n\n"
+
+            # Drain remaining logs
+            while not log_queue.empty():
+                msg = log_queue.get_nowait()
+                yield f"event: log\ndata: {json.dumps({'message': msg})}\n\n"
+
+            result = agent_task.result()
+
+            # Persist to DB
+            findings = result.get("findings", [])
+            with get_db() as db:
+                db.add(AgentRun(
+                    run_id=full_run_id,
+                    agent_id="A18",
+                    agent_name=agent.name,
+                    model=agent.model,
+                    status=result["status"],
+                    started_at=result.get("started_at"),
+                    completed_at=result.get("completed_at"),
+                    findings_count=len(findings),
+                    error_message=result.get("error"),
+                    output_json_path=result.get("output_json"),
+                    output_md_path=result.get("output_md"),
+                ))
+                for f in findings:
+                    db.add(Finding(
+                        run_id=full_run_id,
+                        agent_id="A18",
+                        severity=f.get("severity", "INFO"),
+                        category=f.get("category", "Reverse Engineering"),
+                        subcategory=f.get("subcategory"),
+                        file_path=f.get("file"),
+                        line_number=f.get("line"),
+                        class_name=f.get("class_name"),
+                        method_name=f.get("method_name"),
+                        problem=f.get("problem", ""),
+                        impact=f.get("impact"),
+                        fix_description=f.get("fix"),
+                        fix_code=f.get("fix_code"),
+                        actionable=f.get("actionable", False),
+                        effort_hours=f.get("effort_hours"),
+                    ))
+                run_rec = db.query(Run).filter(Run.id == full_run_id).first()
+                if run_rec:
+                    run_rec.completed_at = _dt.utcnow()
+                    run_rec.status = "complete" if result["status"] == "complete" else "failed"
+                    run_rec.agents_completed = ["A18"] if result["status"] == "complete" else []
+
+            if result["status"] == "failed":
+                yield f"event: failed\ndata: {json.dumps({'error': result.get('error', 'unknown'), 'run_id': full_run_id})}\n\n"
+            else:
+                yield f"event: complete\ndata: {json.dumps({'run_id': full_run_id, 'findings': findings, 'mode': mode})}\n\n"
+
+        except Exception as exc:
+            logger.exception("Reverse engineering stream error")
+            payload = {"error": str(exc)}
+            if run_id:
+                payload["run_id"] = run_id
+            yield f"event: failed\ndata: {json.dumps(payload)}\n\n"
+
+    return StreamingResponse(
+        _event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

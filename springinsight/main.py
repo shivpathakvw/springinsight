@@ -8,6 +8,7 @@ from rich.console import Console
 from . import __version__
 from .commands import context_cmd, github_cmd, init_cmd, report_cmd, run_cmd, web_cmd
 from .commands.mcp_cmd import mcp_cmd
+from .commands.reverse_cmd import reverse_cmd
 from .utils.env import load_env as _load_env
 
 # Load .env from CWD / home directory on startup so ANTHROPIC_API_KEY is
@@ -54,6 +55,7 @@ cli.add_command(web_cmd, name="web")
 cli.add_command(mcp_cmd, name="mcp")
 cli.add_command(context_cmd, name="context")
 cli.add_command(github_cmd, name="github")
+cli.add_command(reverse_cmd, name="reverse")
 
 
 # ── findings subcommand ─────────────────────────────────────────────────────
@@ -185,10 +187,12 @@ def agents_cmd():
     console.print()
     console.print(table)
     console.print()
-    console.print("[dim]Phase 1 — Haiku  (fast scan):    A03, A10, A12[/dim]")
-    console.print("[dim]Phase 2 — Sonnet (deep analysis): A01, A02, A04, A09, A11, A13, A14, A15[/dim]")
-    console.print("[dim]Phase 3 — Opus   (architecture):  A05, A08[/dim]")
-    console.print("[dim]Phase 4 — Sonnet (generation):    A06, A07[/dim]\n")
+    console.print("[dim]Phase 1 — Haiku  (fast scan):      A03, A10, A12[/dim]")
+    console.print("[dim]Phase 2 — Sonnet (deep analysis):  A01, A02, A04, A09, A11, A13, A14, A15, A16, A17[/dim]")
+    console.print("[dim]Phase 3 — Opus   (architecture):   A05, A08, A18 (Reverse Engineering)[/dim]")
+    console.print("[dim]Phase 4 — Sonnet (generation):     A06, A07[/dim]")
+    console.print()
+    console.print("[dim]Run A18 directly: [bold]springinsight reverse ./my-app[/bold][/dim]\n")
 
 
 if __name__ == "__main__":
