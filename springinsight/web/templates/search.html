@@ -370,14 +370,17 @@ function codeSearch() {
       this.query = '';
       this.searching = true;
 
-      const turn = {
+      // Push first, then capture the reactive index.
+      // Never hold a plain `turn` reference — all mutations must go through
+      // this.conversation[idx] so Alpine's Proxy detects the change.
+      this.conversation.push({
         query: q,
         answer: '',
         sources: [],
         streaming: true,
         openSource: null,
-      };
-      this.conversation.push(turn);
+      });
+      const idx = this.conversation.length - 1;
 
       const projectPath = this.repoUrl;
       const url = `/api/search/ask?query=${encodeURIComponent(q)}&project_path=${encodeURIComponent(projectPath)}`;
@@ -386,25 +389,27 @@ function codeSearch() {
       es.onmessage = (e) => {
         const msg = JSON.parse(e.data);
         if (msg.type === 'sources') {
-          turn.sources = msg.data || [];
+          this.conversation[idx].sources = msg.data || [];
         } else if (msg.type === 'token') {
-          turn.answer = (turn.answer || '') + (msg.data || '');
+          this.conversation[idx].answer = (this.conversation[idx].answer || '') + (msg.data || '');
         } else if (msg.type === 'done') {
-          turn.streaming = false;
+          this.conversation[idx].streaming = false;
           this.searching = false;
           es.close();
         } else if (msg.type === 'error') {
-          turn.answer = '⚠️ ' + (msg.data?.message || 'Search failed');
-          turn.streaming = false;
+          this.conversation[idx].answer = '⚠️ ' + (msg.data?.message || 'Search failed');
+          this.conversation[idx].streaming = false;
           this.searching = false;
           es.close();
         }
       };
 
       es.onerror = () => {
-        turn.streaming = false;
+        this.conversation[idx].streaming = false;
         this.searching = false;
-        if (!turn.answer) turn.answer = '⚠️ Connection error';
+        if (!this.conversation[idx].answer) {
+          this.conversation[idx].answer = '⚠️ Connection error';
+        }
         es.close();
       };
     },
