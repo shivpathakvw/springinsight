@@ -233,6 +233,19 @@
 
   </div><!-- /flex layout -->
 
+  <!-- ── Applied-files Toast ──────────────────────────────────────────────── -->
+  <div x-show="toast.show" x-cloak x-transition
+       class="fixed bottom-6 right-6 z-[100] max-w-sm w-full pointer-events-none">
+    <div class="rounded-xl shadow-2xl border text-sm whitespace-pre-wrap p-4 leading-relaxed"
+         :class="toast.type === 'success'
+                   ? 'bg-emerald-950 border-emerald-700 text-emerald-200'
+                   : 'bg-gray-800 border-gray-600 text-gray-300'">
+      <div class="flex items-start gap-2">
+        <span class="shrink-0 mt-0.5" x-text="toast.type === 'success' ? '✅' : 'ℹ️'"></span>
+        <span x-text="toast.message"></span>
+      </div>
+    </div>
+  </div>
 
   <!-- ── New Task Modal ───────────────────────────────────────────────────── -->
   <div x-show="showNewTask" x-cloak
@@ -280,6 +293,24 @@
           <input x-model="newTask.priority" type="number" min="1" max="10"
                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white
                         focus:outline-none focus:border-orange-500"/>
+        </div>
+      </div>
+
+      <!-- Context / Guidelines (collapsible) -->
+      <div class="mb-4">
+        <button @click="newTask.showContext = !newTask.showContext"
+                class="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition mb-1">
+          <svg class="w-3 h-3 transition-transform" :class="newTask.showContext ? 'rotate-90' : ''"
+               fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+          <span x-text="newTask.showContext ? 'Hide context / guidelines' : 'Add context / guidelines (optional)'"></span>
+        </button>
+        <div x-show="newTask.showContext">
+          <textarea x-model="newTask.context" rows="4"
+                    placeholder="Paste any guidelines, references, existing code snippets, or constraints the agent should know about…"
+                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white
+                           placeholder-gray-500 focus:outline-none focus:border-orange-500 resize-none mt-1"></textarea>
         </div>
       </div>
 
@@ -557,7 +588,8 @@ function springTeam() {
       { key: 'failed',      label: 'Failed',       color: '#f87171' },
     ],
 
-    newTask: { description: '', skill: '', priority: 5 },
+    newTask: { description: '', skill: '', priority: 5, context: '', showContext: false },
+    toast: { show: false, type: 'success', message: '' },
 
     init() {
       this.loadAll();
@@ -701,6 +733,7 @@ function springTeam() {
       if (!this.newTask.description.trim() || this.creating) return;
       this.creating = true;
       try {
+        const contextNotes = this.newTask.context.trim();
         const res = await fetch('/api/team/tasks', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
@@ -709,11 +742,12 @@ function springTeam() {
             skill: this.newTask.skill || null,
             priority: this.newTask.priority,
             project_path: this.projectPath,
+            context: contextNotes ? { notes: contextNotes } : {},
           }),
         });
         const data = await res.json();
         this.showNewTask = false;
-        this.newTask = { description: '', skill: '', priority: 5 };
+        this.newTask = { description: '', skill: '', priority: 5, context: '', showContext: false };
         await this.loadTasks();
       } finally {
         this.creating = false;
@@ -729,9 +763,19 @@ function springTeam() {
     },
 
     async approveTask(taskId) {
-      await fetch(`/api/team/tasks/${taskId}/approve`, { method: 'POST' });
+      const res = await fetch(`/api/team/tasks/${taskId}/approve`, { method: 'POST' });
+      const data = await res.json();
       this.selectedTask = null;
       await this.loadTasks();
+      // Show applied-files toast
+      const files = data.applied_files || [];
+      if (files.length > 0) {
+        this.toast = { show: true, type: 'success', message: `✅ Applied ${files.length} file${files.length > 1 ? 's' : ''} to disk:\n${files.join('\n')}` };
+        setTimeout(() => { this.toast.show = false; }, 8000);
+      } else if (data.ok) {
+        this.toast = { show: true, type: 'info', message: '✅ Task approved — no file changes to apply.' };
+        setTimeout(() => { this.toast.show = false; }, 4000);
+      }
     },
 
     async rejectTask(taskId) {

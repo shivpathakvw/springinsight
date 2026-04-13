@@ -457,9 +457,12 @@ class Orchestrator:
         self._step(task_id, skill,
                    f"🤖 Dispatching to {model} with tools: Read, Write, Bash, Glob, Grep")
 
+        # Write tool intentionally excluded — agents output code as ### FILE: blocks.
+        # Files are applied to disk only when the user clicks Approve, giving a
+        # clean human-in-the-loop review before any project files are touched.
         proc = await asyncio.create_subprocess_exec(
             "claude", "--print", "--model", model,
-            "--allowedTools", "Bash,Read,Write,Glob,Grep",
+            "--allowedTools", "Bash,Read,Glob,Grep",
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -644,15 +647,96 @@ class Orchestrator:
     # Quick task management (for web UI)
     # ------------------------------------------------------------------
 
-    def approve_task(self, task_id: str) -> bool:
-        """Move a REVIEW task to DONE."""
+    # ------------------------------------------------------------------
+    # Apply agent output to project files
+    # ------------------------------------------------------------------
+
+    def _apply_output(self, project_path: str, output: str, output_type: str) -> List[str]:
+        """
+        Parse agent output for ### FILE: blocks and write them to the project.
+        Returns a list of relative paths that were written.
+
+        Accepted code-bearing output types: code_diff, test_file, doc_update.
+        Reviews (review_comment) and plans (plan) are never written to disk.
+        """
+        if output_type not in ("code_diff", "test_file", "doc_update"):
+            return []
+
+        project = Path(project_path)
+        written: List[str] = []
+
+        # Primary format: ### FILE: path/to/File.java  followed by a fenced block
+        primary = re.compile(
+            r'^###?\s+FILE:\s*([\w/.\-]+\.\w+)\s*\n'   # ### FILE: rel/path.ext
+            r'```[\w]*\n'                                 # ```java / ```sql / etc.
+            r'(.*?)'                                      # file content
+            r'```',
+            re.MULTILINE | re.DOTALL,
+        )
+        # Fallback: first line of a fenced block is // FILE: path or # FILE: path
+        fallback = re.compile(
+            r'```[\w]*\n'
+            r'(?://|/\*|#)\s*FILE:\s*([\w/.\-]+\.\w+)\s*\n'
+            r'(.*?)'
+            r'```',
+            re.DOTALL,
+        )
+
+        found: dict[str, str] = {}
+        for m in primary.finditer(output):
+            found[m.group(1).strip()] = m.group(2).rstrip()
+        for m in fallback.finditer(output):
+            path = m.group(1).strip()
+            if path not in found:          # primary wins if both match
+                found[path] = m.group(2).rstrip()
+
+        for rel_path, content in found.items():
+            # Security: block path-traversal attempts
+            try:
+                abs_path = (project / rel_path).resolve()
+                abs_path.relative_to(project.resolve())
+            except (ValueError, RuntimeError):
+                log.warning(f"[apply] Blocked unsafe path: {rel_path}")
+                continue
+
+            abs_path.parent.mkdir(parents=True, exist_ok=True)
+            abs_path.write_text(content, encoding="utf-8")
+            written.append(rel_path)
+            log.info(f"[apply] Written: {rel_path}")
+
+        return written
+
+    def approve_task(self, task_id: str) -> dict:
+        """Move a REVIEW task to DONE, applying code changes to the project directory."""
         task = self.db.get_task(task_id)
-        if task and task["status"] == TaskStatus.REVIEW:
-            self.db.update_task_status(task_id, TaskStatus.DONE)
-            self.db.post_message(task_id, "user", "Approved by user", "completion")
-            self._broadcast("task_updated", self._task_payload(task_id))
-            return True
-        return False
+        if not task or task["status"] != TaskStatus.REVIEW:
+            return {"ok": False, "applied_files": []}
+
+        # Apply output files to disk
+        applied: List[str] = []
+        if task.get("output"):
+            applied = self._apply_output(
+                task["project_path"],
+                task["output"],
+                task.get("output_type", ""),
+            )
+
+        self.db.update_task_status(task_id, TaskStatus.DONE)
+
+        if applied:
+            names = ", ".join(f"`{p.split('/')[-1]}`" for p in applied[:4])
+            suffix = f" (+{len(applied) - 4} more)" if len(applied) > 4 else ""
+            msg = f"✅ Approved — {len(applied)} file(s) written to project: {names}{suffix}"
+        else:
+            msg = "✅ Approved by user (no file blocks detected in output)"
+
+        self.db.post_message(task_id, "user", msg, "completion")
+        self._broadcast("task_updated", self._task_payload(task_id))
+        self._broadcast("message", {
+            "task_id": task_id, "from": "user",
+            "content": msg, "type": "completion",
+        })
+        return {"ok": True, "applied_files": applied}
 
     def reject_task(self, task_id: str, feedback: str = "") -> bool:
         """Return a REVIEW task to PENDING for rework."""

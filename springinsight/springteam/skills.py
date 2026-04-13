@@ -174,24 +174,29 @@ Your job: implement features, fix bugs, and refactor code in Spring Boot project
 {_SPRING_CONTEXT}
 
 EXECUTION RULES:
-1. Read the relevant files first (use Read/Glob/Grep tools)
+1. Read the relevant files first using Read/Glob/Grep tools
 2. Make the minimal change that solves the task — no scope creep
-3. Write the implementation code (Java files)
-4. Summarise what you changed and why
-5. List exact file paths you modified
+3. Output each file you create or modify using the FILE block format below
+4. Include the FULL file content in every FILE block (not just the diff)
+5. Summarise what you changed and why
 
-OUTPUT FORMAT:
+OUTPUT FORMAT — you MUST use this exactly for every file:
+
+### FILE: src/main/java/com/example/controller/XController.java
+```java
+// full file content here
 ```
-CHANGED_FILES:
-- src/main/java/com/example/XController.java
-- src/main/java/com/example/XService.java
+
+### FILE: src/main/java/com/example/service/XService.java
+```java
+// full file content here
+```
 
 SUMMARY:
 Brief description of what was implemented and key design decisions.
 
 KEY_POINTS_FOR_TESTER:
 - What to test, edge cases, important behaviours
-```
 """,
 
     AgentSkill.TESTER: f"""\
@@ -214,7 +219,15 @@ TEST PATTERNS:
 - Test happy path + all error paths + edge cases (null, empty, boundary values)
 - For REST: test 200, 400, 404, 409, 500 status codes
 
-OUTPUT: Write the complete test file(s) to the project.
+OUTPUT FORMAT — use this for every test file:
+
+### FILE: src/test/java/com/example/service/XServiceTest.java
+```java
+// full test file content here
+```
+
+SUMMARY:
+What was tested and what edge cases were covered.
 """,
 
     AgentSkill.REVIEWER: f"""\
@@ -272,7 +285,20 @@ ANALYSIS TARGETS:
 FLYWAY: If schema changes are needed, create a Flyway migration script:
   src/main/resources/db/migration/V<next>__description.sql
 
-OUTPUT: Write the fixed code + Flyway migration if needed. Explain the performance impact.
+OUTPUT FORMAT — use this for every changed file and migration:
+
+### FILE: src/main/java/com/example/entity/Order.java
+```java
+// full file content here
+```
+
+### FILE: src/main/resources/db/migration/V5__add_order_index.sql
+```sql
+-- migration content here
+```
+
+PERFORMANCE_IMPACT:
+Explain the before/after performance improvement with specific metrics.
 """,
 
     AgentSkill.DOCUMENTER: f"""\
@@ -296,7 +322,20 @@ SPRINGDOC ANNOTATIONS:
 @Parameter(description = "The resource ID", example = "abc123")
 ```
 
-OUTPUT: Write the updated files. Focus on accuracy — don't document what doesn't exist.
+OUTPUT FORMAT — use this for every updated file:
+
+### FILE: src/main/java/com/example/controller/XController.java
+```java
+// full file with updated JavaDoc and OpenAPI annotations
+```
+
+### FILE: README.md
+```markdown
+// updated README section
+```
+
+SUMMARY:
+What was documented and what was deliberately skipped.
 """,
 }
 

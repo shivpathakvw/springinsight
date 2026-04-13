@@ -659,41 +659,86 @@
       color: var(--blue);
     }
 
-    /* ── SpringTeam mockup ────────────────────────────────────────────────── */
+    /* ── SpringTeam Kanban mockup ────────────────────────────────────────── */
     .kanban-mockup {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 14px;
-      padding: 1.25rem;
+      padding: 1.25rem 1.5rem;
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: .75rem;
+      gap: 1rem;
+      overflow: hidden;
     }
+    .kb-col { min-width: 0; display: flex; flex-direction: column; }
     .kb-col-head {
       font-size: .65rem; font-weight: 800; letter-spacing: .1em;
-      text-transform: uppercase; padding: 0 0 .5rem;
+      text-transform: uppercase; padding: 0 0 .6rem;
       border-bottom: 2px solid;
-      margin-bottom: .5rem;
+      margin-bottom: .65rem;
       display: flex; justify-content: space-between; align-items: center;
+      white-space: nowrap;
+    }
+    .kb-col-head span {
+      font-size: .7rem; font-weight: 700;
+      background: rgba(255,255,255,.07); border-radius: 9999px;
+      padding: 0 .45rem; margin-left: .35rem;
     }
     .kb-pending  { color: #9ca3af; border-color: #374151; }
     .kb-progress { color: #60a5fa; border-color: rgba(96,165,250,.4); }
     .kb-review   { color: #fb923c; border-color: rgba(251,146,60,.4); }
     .kb-done     { color: #34d399; border-color: rgba(52,211,153,.4); }
     .kb-card {
-      border-radius: 8px; padding: .65rem .75rem;
+      border-radius: 10px; padding: .75rem .85rem;
       border: 1px solid var(--border);
       background: var(--surface2);
-      margin-bottom: .5rem; font-size: .75rem;
+      margin-bottom: .55rem; font-size: .78rem;
+      overflow: hidden;
     }
+    .kb-card--active { border-color: rgba(96,165,250,.35); background: rgba(96,165,250,.04); }
+    .kb-card--review { border-color: rgba(251,146,60,.35); background: rgba(251,146,60,.04); }
     .kb-badge {
-      font-size: .62rem; font-weight: 700; letter-spacing: .05em;
-      border-radius: 4px; padding: 1px 6px; margin-bottom: .35rem; display: inline-block;
+      font-size: .63rem; font-weight: 700; letter-spacing: .04em;
+      border-radius: 5px; padding: 2px 7px; margin-bottom: .4rem; display: inline-block;
     }
-    .kb-title { color: var(--text); line-height: 1.4; margin-bottom: .3rem; }
-    .kb-meta { color: var(--text-dim); display: flex; align-items: center; gap: .4rem; }
-    .kb-pulse { width: 5px; height: 5px; border-radius: 50%; background: #60a5fa; animation: pulse 1.5s infinite; display: inline-block; }
-    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+    .kb-title { color: var(--text); line-height: 1.45; margin-bottom: .35rem; font-size: .8rem; }
+    .kb-meta { color: var(--text-dim); display: flex; align-items: center; gap: .4rem; font-size: .72rem; margin-bottom: .4rem; }
+    .kb-pulse { width: 6px; height: 6px; border-radius: 50%; background: #60a5fa; animation: pulse 1.5s infinite; display: inline-block; flex-shrink: 0; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+    /* Live step log inside in-progress card */
+    .kb-steps { margin-top: .5rem; display: flex; flex-direction: column; gap: .25rem; }
+    .kb-step { font-size: .67rem; padding: .2rem .5rem; border-radius: 4px; color: var(--text-dim); }
+    .kb-step--done   { color: #34d399; background: rgba(52,211,153,.07); }
+    .kb-step--active { color: #60a5fa; background: rgba(96,165,250,.1); font-weight: 600; }
+    /* Approve / Reject buttons inside review card */
+    .kb-actions { display: flex; gap: .4rem; margin-top: .5rem; }
+    .kb-btn { font-size: .68rem; font-weight: 700; border: none; border-radius: 5px; padding: 3px 10px; cursor: pointer; }
+    .kb-btn--approve { background: rgba(34,197,94,.2); color: #4ade80; }
+    .kb-btn--reject  { background: rgba(239,68,68,.15); color: #f87171; }
+
+    /* ── SpringTeam bottom section ────────────────────────────────────────── */
+    .st-bottom {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+      align-items: start;
+    }
+    .st-agents {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: .65rem;
+    }
+    .st-agent-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: .85rem;
+    }
+    .st-agent-icon { font-size: 1.25rem; margin-bottom: .35rem; }
+    .st-agent-name { font-weight: 700; font-size: .85rem; margin-bottom: .25rem; color: var(--text); }
+    .st-agent-desc { font-size: .75rem; color: var(--text-mid); line-height: 1.5; }
+    .st-cli { min-width: 0; }
+    .st-cli pre { font-size: .78rem; margin: 0; }
 
     /* ── Feature highlight banner ─────────────────────────────────────────── */
     .feature-banner {
@@ -705,11 +750,17 @@
     .feature-banner-body p { font-size: .875rem; color: var(--text-mid); line-height: 1.65; }
 
     /* ── Responsive ───────────────────────────────────────────────────────── */
+    @media (max-width: 900px) {
+      .kanban-mockup { grid-template-columns: repeat(2,1fr); }
+      .st-bottom     { grid-template-columns: 1fr; }
+      .st-agents     { grid-template-columns: repeat(2,1fr); }
+    }
     @media (max-width: 640px) {
       .nav-links { display: none; }
       .hero { padding: 4rem 0 3rem; }
       .section { padding: 3.5rem 0; }
-      .kanban-mockup { grid-template-columns: repeat(2,1fr); }
+      .kanban-mockup { grid-template-columns: 1fr 1fr; gap: .6rem; padding: 1rem; }
+      .st-agents { grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
@@ -1243,118 +1294,132 @@ springinsight web --open  <span style="color:var(--text-dim)"># → CodeSearch i
     <h2 class="section-title">Six specialist agents.<br/>One coherent team.</h2>
     <p class="section-sub">Describe what you need — SpringTeam's Planner decomposes it into tasks, routes each to the right expert, and auto-chains Tester + Reviewer after every implementation. You review, approve, and ship.</p>
 
-    <div class="grid-2" style="gap:3rem;align-items:start;margin-top:2rem">
+    <!-- ── Live Kanban mockup (full-width) ─────────────────────────────────── -->
+    <div class="kanban-mockup" style="margin-top:2rem">
 
-      <!-- Left: kanban mockup -->
-      <div>
-        <div class="kanban-mockup">
-          <!-- Pending -->
-          <div>
-            <div class="kb-col-head kb-pending">Pending <span>2</span></div>
-            <div class="kb-card">
-              <div class="kb-badge" style="background:rgba(96,165,250,.15);color:#60a5fa">🧪 Tester</div>
-              <div class="kb-title">Write tests for RefreshTokenService</div>
-              <div class="kb-meta"><span style="color:var(--text-dim)">depends on task #3</span></div>
-            </div>
-            <div class="kb-card">
-              <div class="kb-badge" style="background:rgba(168,85,247,.15);color:#c084fc">📝 Documenter</div>
-              <div class="kb-title">Update API docs for new endpoints</div>
-              <div class="kb-meta"><span style="color:var(--text-dim)">P2</span></div>
-            </div>
-          </div>
-
-          <!-- In Progress -->
-          <div>
-            <div class="kb-col-head kb-progress">In Progress <span>1</span></div>
-            <div class="kb-card" style="border-color:rgba(96,165,250,.3)">
-              <div class="kb-badge" style="background:rgba(34,197,94,.15);color:#4ade80">👨‍💻 Coder</div>
-              <div class="kb-title">Implement JWT refresh token endpoint</div>
-              <div class="kb-meta"><span class="kb-pulse"></span><span style="color:#60a5fa">running · 42s</span></div>
-            </div>
-          </div>
-
-          <!-- Review -->
-          <div>
-            <div class="kb-col-head kb-review">Review <span>1</span></div>
-            <div class="kb-card" style="border-color:rgba(251,146,60,.3)">
-              <div class="kb-badge" style="background:rgba(251,146,60,.15);color:#fb923c">👁️ Reviewer</div>
-              <div class="kb-title">Review SecurityConfig changes</div>
-              <div class="kb-meta" style="gap:.6rem">
-                <button style="font-size:.65rem;background:rgba(34,197,94,.2);color:#4ade80;border:none;border-radius:4px;padding:2px 7px;cursor:pointer">✓ Approve</button>
-                <button style="font-size:.65rem;background:rgba(239,68,68,.15);color:#f87171;border:none;border-radius:4px;padding:2px 7px;cursor:pointer">✗ Reject</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Done -->
-          <div>
-            <div class="kb-col-head kb-done">Done <span>3</span></div>
-            <div class="kb-card">
-              <div class="kb-badge" style="background:rgba(168,85,247,.15);color:#c084fc">🗺️ Planner</div>
-              <div class="kb-title">Decompose JWT refresh token feature</div>
-              <div class="kb-meta"><span style="color:#34d399">✓ 5 sub-tasks created</span></div>
-            </div>
-            <div class="kb-card">
-              <div class="kb-badge" style="background:rgba(234,179,8,.15);color:#facc15">🗄️ DB Opt</div>
-              <div class="kb-title">Add token_revocations table + index</div>
-              <div class="kb-meta"><span style="color:#34d399">✓ done</span></div>
-            </div>
-          </div>
+      <!-- Pending -->
+      <div class="kb-col">
+        <div class="kb-col-head kb-pending">Pending <span>2</span></div>
+        <div class="kb-card">
+          <div class="kb-badge" style="background:rgba(96,165,250,.15);color:#60a5fa">🧪 Tester</div>
+          <div class="kb-title">Write tests for<br/>RefreshTokenService</div>
+          <div class="kb-meta"><span style="color:var(--text-dim)">depends on task #3</span></div>
         </div>
-
-        <p style="font-size:.78rem;color:var(--text-dim);margin-top:.75rem;text-align:center">Live Kanban board with SSE real-time updates · approve/reject before merge</p>
+        <div class="kb-card">
+          <div class="kb-badge" style="background:rgba(168,85,247,.15);color:#c084fc">📝 Documenter</div>
+          <div class="kb-title">Update API docs for new endpoints</div>
+          <div class="kb-meta"><span style="color:var(--text-dim)">P2</span></div>
+        </div>
       </div>
 
-      <!-- Right: agent roster + feature callouts -->
-      <div>
-        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:.75rem;margin-bottom:1.5rem">
-          <div style="background:var(--surface);border:1px solid rgba(34,197,94,.2);border-radius:10px;padding:1rem">
-            <div style="font-size:1.3rem;margin-bottom:.4rem">🗺️</div>
-            <div style="font-weight:700;font-size:.88rem;margin-bottom:.3rem">Planner</div>
-            <div style="font-size:.78rem;color:var(--text-mid)">Decomposes your request into ordered sub-tasks. Resolves dependencies automatically.</div>
-          </div>
-          <div style="background:var(--surface);border:1px solid rgba(59,130,246,.2);border-radius:10px;padding:1rem">
-            <div style="font-size:1.3rem;margin-bottom:.4rem">👨‍💻</div>
-            <div style="font-weight:700;font-size:.88rem;margin-bottom:.3rem">Coder</div>
-            <div style="font-size:.78rem;color:var(--text-mid)">Implements Spring Boot features with correct idioms. Knows @Transactional, bean scoping, JPA.</div>
-          </div>
-          <div style="background:var(--surface);border:1px solid rgba(168,85,247,.2);border-radius:10px;padding:1rem">
-            <div style="font-size:1.3rem;margin-bottom:.4rem">🧪</div>
-            <div style="font-weight:700;font-size:.88rem;margin-bottom:.3rem">Tester</div>
-            <div style="font-size:.78rem;color:var(--text-mid)">Auto-triggered after Coder. Writes JUnit 5 + Mockito tests for critical paths.</div>
-          </div>
-          <div style="background:var(--surface);border:1px solid rgba(251,146,60,.2);border-radius:10px;padding:1rem">
-            <div style="font-size:1.3rem;margin-bottom:.4rem">👁️</div>
-            <div style="font-weight:700;font-size:.88rem;margin-bottom:.3rem">Reviewer</div>
-            <div style="font-size:.78rem;color:var(--text-mid)">Reviews every implementation before you see it. Catches security gaps and Spring anti-patterns.</div>
-          </div>
-          <div style="background:var(--surface);border:1px solid rgba(234,179,8,.2);border-radius:10px;padding:1rem">
-            <div style="font-size:1.3rem;margin-bottom:.4rem">🗄️</div>
-            <div style="font-weight:700;font-size:.88rem;margin-bottom:.3rem">DB Optimizer</div>
-            <div style="font-size:.78rem;color:var(--text-mid)">Schema design, index strategy, Flyway migrations, query optimization for your data model.</div>
-          </div>
-          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem">
-            <div style="font-size:1.3rem;margin-bottom:.4rem">📝</div>
-            <div style="font-weight:700;font-size:.88rem;margin-bottom:.3rem">Documenter</div>
-            <div style="font-size:.78rem;color:var(--text-mid)">Generates API docs, READMEs, and onboarding guides after features land. Fast Haiku model.</div>
+      <!-- In Progress -->
+      <div class="kb-col">
+        <div class="kb-col-head kb-progress">In Progress <span>1</span></div>
+        <div class="kb-card kb-card--active">
+          <div class="kb-badge" style="background:rgba(34,197,94,.15);color:#4ade80">👨‍💻 Coder</div>
+          <div class="kb-title">Implement JWT refresh token endpoint</div>
+          <div class="kb-meta"><span class="kb-pulse"></span><span style="color:#60a5fa">running · 42s</span></div>
+          <div class="kb-steps">
+            <div class="kb-step kb-step--done">🔍 Task analysed</div>
+            <div class="kb-step kb-step--done">📖 Reading JwtService.java</div>
+            <div class="kb-step kb-step--active">✏️ Writing RefreshTokenService…</div>
           </div>
         </div>
+      </div>
 
-        <pre style="font-size:.78rem"><code><span style="color:var(--green)"># Submit any task — Planner decomposes automatically</span>
+      <!-- Review -->
+      <div class="kb-col">
+        <div class="kb-col-head kb-review">Review <span>1</span></div>
+        <div class="kb-card kb-card--review">
+          <div class="kb-badge" style="background:rgba(251,146,60,.15);color:#fb923c">👁️ Reviewer</div>
+          <div class="kb-title">Review SecurityConfig changes</div>
+          <div class="kb-meta">Ready for your approval</div>
+          <div class="kb-actions">
+            <button class="kb-btn kb-btn--approve">✓ Approve</button>
+            <button class="kb-btn kb-btn--reject">✗ Reject</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Done -->
+      <div class="kb-col">
+        <div class="kb-col-head kb-done">Done <span>3</span></div>
+        <div class="kb-card">
+          <div class="kb-badge" style="background:rgba(168,85,247,.15);color:#c084fc">🗺️ Planner</div>
+          <div class="kb-title">Decompose JWT refresh token feature</div>
+          <div class="kb-meta"><span style="color:#34d399">✓ 5 sub-tasks created</span></div>
+        </div>
+        <div class="kb-card">
+          <div class="kb-badge" style="background:rgba(234,179,8,.15);color:#facc15">🗄️ DB Opt</div>
+          <div class="kb-title">Add token_revocations table + index</div>
+          <div class="kb-meta"><span style="color:#34d399">✓ done</span></div>
+        </div>
+        <div class="kb-card">
+          <div class="kb-badge" style="background:rgba(34,197,94,.15);color:#4ade80">👨‍💻 Coder</div>
+          <div class="kb-title">Implement UserProfileService patch</div>
+          <div class="kb-meta"><span style="color:#34d399">✓ approved</span></div>
+        </div>
+      </div>
+
+    </div>
+    <p style="font-size:.78rem;color:var(--text-dim);margin-top:.6rem;text-align:center">
+      Live Kanban board with SSE real-time updates · step-by-step agent activity · approve/reject before merge
+    </p>
+
+    <!-- ── Agent roster + CLI ───────────────────────────────────────────────── -->
+    <div class="st-bottom" style="margin-top:2.5rem">
+
+      <!-- 6 agent cards -->
+      <div class="st-agents">
+        <div class="st-agent-card" style="border-color:rgba(168,85,247,.25)">
+          <div class="st-agent-icon">🗺️</div>
+          <div class="st-agent-name">Planner</div>
+          <div class="st-agent-desc">Decomposes your request into ordered sub-tasks. Resolves dependencies automatically.</div>
+        </div>
+        <div class="st-agent-card" style="border-color:rgba(34,197,94,.25)">
+          <div class="st-agent-icon">👨‍💻</div>
+          <div class="st-agent-name">Coder</div>
+          <div class="st-agent-desc">Implements Spring Boot features with correct idioms. Knows @Transactional, bean scoping, JPA.</div>
+        </div>
+        <div class="st-agent-card" style="border-color:rgba(96,165,250,.25)">
+          <div class="st-agent-icon">🧪</div>
+          <div class="st-agent-name">Tester</div>
+          <div class="st-agent-desc">Auto-triggered after Coder. Writes JUnit 5 + Mockito tests for critical paths.</div>
+        </div>
+        <div class="st-agent-card" style="border-color:rgba(251,146,60,.25)">
+          <div class="st-agent-icon">👁️</div>
+          <div class="st-agent-name">Reviewer</div>
+          <div class="st-agent-desc">Reviews every implementation before you see it. Catches security gaps and Spring anti-patterns.</div>
+        </div>
+        <div class="st-agent-card" style="border-color:rgba(234,179,8,.25)">
+          <div class="st-agent-icon">🗄️</div>
+          <div class="st-agent-name">DB Optimizer</div>
+          <div class="st-agent-desc">Schema design, index strategy, Flyway migrations, query optimization for your data model.</div>
+        </div>
+        <div class="st-agent-card" style="border-color:rgba(250,204,21,.25)">
+          <div class="st-agent-icon">📝</div>
+          <div class="st-agent-name">Documenter</div>
+          <div class="st-agent-desc">Generates API docs, READMEs, and onboarding guides after features land. Fast Haiku model.</div>
+        </div>
+      </div>
+
+      <!-- CLI block -->
+      <div class="st-cli">
+        <pre><code><span style="color:var(--green)"># Submit any task — Planner decomposes automatically</span>
 springinsight team task \
   "add JWT refresh token with 7-day expiry and revocation"
 
-<span style="color:var(--text-dim)"># → Planner creates 5 sub-tasks automatically:
-#   [planner]   Decompose refresh token feature
-#   [db_optim]  Add token_revocations table
-#   [coder]     Implement RefreshTokenService
-#   [tester]    Write JUnit tests             (auto-triggered)
-#   [reviewer]  Review all changes            (auto-triggered)
+<span style="color:var(--text-dim)"># → Planner creates sub-tasks automatically:
+#   [planner]    Decompose refresh token feature
+#   [db_optim]   Add token_revocations table
+#   [coder]      Implement RefreshTokenService
+#   [tester]     Write JUnit tests        (auto-triggered)
+#   [reviewer]   Review all changes       (auto-triggered)
 #   [documenter] Update API docs</span>
 
 <span style="color:var(--green)"># Monitor live progress</span>
-springinsight team status
-springinsight web --open  <span style="color:var(--text-dim)"># → SpringTeam Kanban board</span>
+springinsight team list
+springinsight web --open
 
 <span style="color:var(--green)"># Approve reviewed tasks before merge</span>
 springinsight team approve &lt;task-id&gt;</code></pre>

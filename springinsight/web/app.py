@@ -996,8 +996,12 @@ async def api_get_task(task_id: str):
 async def api_approve_task(task_id: str):
     data_dir = _data_dir()
     orch = _team_orch(data_dir)
-    ok = orch.approve_task(task_id)
-    return {"ok": ok}
+    result = orch.approve_task(task_id)
+    # approve_task() returns dict {"ok": bool, "applied_files": [...]}
+    # Support both old (bool) and new (dict) return shapes
+    if isinstance(result, dict):
+        return result
+    return {"ok": bool(result), "applied_files": []}
 
 
 @app.post("/api/team/tasks/{task_id}/reject")
