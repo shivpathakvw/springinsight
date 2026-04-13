@@ -10,6 +10,7 @@ from .commands import context_cmd, github_cmd, init_cmd, report_cmd, run_cmd, we
 from .commands.mcp_cmd import mcp_cmd
 from .commands.reverse_cmd import reverse_cmd
 from .commands.search_cmd import search_cmd
+from .commands.team_cmd import team_cmd
 from .utils.env import load_env as _load_env
 
 # Load .env from CWD / home directory on startup so ANTHROPIC_API_KEY is
@@ -58,6 +59,7 @@ cli.add_command(context_cmd, name="context")
 cli.add_command(github_cmd, name="github")
 cli.add_command(reverse_cmd, name="reverse")
 cli.add_command(search_cmd, name="search")
+cli.add_command(team_cmd, name="team")
 
 
 # ── findings subcommand ─────────────────────────────────────────────────────

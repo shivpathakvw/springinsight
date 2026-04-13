@@ -1,0 +1,668 @@
+{% extends "base.html" %}
+{% block title %}SpringTeam — Multi-Agent Task Board{% endblock %}
+{% block nav_tasks %}active{% endblock %}
+
+{% block content %}
+<div x-data="springTeam()" x-init="init()" class="min-h-screen bg-gray-950 text-gray-100 flex flex-col">
+
+  <!-- ── Top bar ──────────────────────────────────────────────────────────── -->
+  <div class="border-b border-gray-800 bg-gray-900/60 backdrop-blur px-6 py-3 shrink-0">
+    <div class="max-w-full flex items-center justify-between gap-4">
+
+      <!-- Title + agent pills -->
+      <div class="flex items-center gap-4">
+        <div>
+          <h1 class="text-lg font-bold text-white flex items-center gap-2">
+            <svg class="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+            </svg>
+            SpringTeam
+          </h1>
+          <p class="text-xs text-gray-500">Multi-agent task execution for Spring Boot</p>
+        </div>
+
+        <!-- Agent status pills -->
+        <div class="flex gap-1.5 flex-wrap">
+          <template x-for="agent in agents" :key="agent.agent_type">
+            <div class="flex items-center gap-1 text-xs rounded-full px-2.5 py-1 border"
+                 :class="{
+                   'bg-emerald-950/50 border-emerald-800 text-emerald-400': agent.status === 'working',
+                   'bg-gray-800/50 border-gray-700 text-gray-500': agent.status === 'idle',
+                   'bg-yellow-950/50 border-yellow-800 text-yellow-400': agent.status === 'paused',
+                 }">
+              <span x-text="skillIcon(agent.agent_type)"></span>
+              <span x-text="agent.agent_type.replace('_',' ')"></span>
+              <span x-show="agent.status === 'working'" class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="flex items-center gap-2">
+        <!-- Project input -->
+        <input x-model="projectPath" type="text" placeholder="Project path or GitHub URL"
+               class="w-72 bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white
+                      placeholder-gray-500 focus:outline-none focus:border-orange-500"/>
+
+        <!-- Start/Stop -->
+        <template x-if="!teamRunning">
+          <button @click="startAgents()"
+                  :disabled="!projectPath.trim()"
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                         bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white transition">
+            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M6.3 2.841A1.5 1.5 0 004 4.11v11.78a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/>
+            </svg>
+            Start Agents
+          </button>
+        </template>
+        <template x-if="teamRunning">
+          <button @click="stopAgents()"
+                  class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                         bg-red-800 hover:bg-red-700 text-white transition">
+            <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M5.75 3a.75.75 0 00-.75.75v12.5c0 .414.336.75.75.75h1.5a.75.75 0 00.75-.75V3.75A.75.75 0 007.25 3h-1.5zM12.75 3a.75.75 0 00-.75.75v12.5c0 .414.336.75.75.75h1.5a.75.75 0 00.75-.75V3.75a.75.75 0 00-.75-.75h-1.5z"/>
+            </svg>
+            Stop
+          </button>
+        </template>
+
+        <!-- New task button -->
+        <button @click="showNewTask = true"
+                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                       bg-orange-600 hover:bg-orange-500 text-white transition">
+          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+          </svg>
+          New Task
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Main layout: Kanban + sidebar ───────────────────────────────────── -->
+  <div class="flex flex-1 overflow-hidden">
+
+    <!-- Kanban columns -->
+    <div class="flex-1 overflow-x-auto p-4">
+      <div class="flex gap-3 h-full min-w-max">
+
+        <!-- Column helper: reused for each status -->
+        <template x-for="col in columns" :key="col.key">
+          <div class="flex flex-col w-64 shrink-0">
+            <!-- Column header -->
+            <div class="flex items-center justify-between mb-2 px-1">
+              <div class="flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full" :style="`background:${col.color}`"></div>
+                <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider" x-text="col.label"></span>
+              </div>
+              <span class="text-xs bg-gray-800 text-gray-500 rounded-full px-2 py-0.5"
+                    x-text="(tasks[col.key] || []).length"></span>
+            </div>
+
+            <!-- Cards -->
+            <div class="flex flex-col gap-2 flex-1 overflow-y-auto min-h-0 pb-2">
+              <template x-for="task in (tasks[col.key] || [])" :key="task.id">
+                <div @click="openTask(task.id)"
+                     class="bg-gray-900 border border-gray-800 hover:border-gray-600 rounded-xl p-3
+                            cursor-pointer transition group relative">
+
+                  <!-- Priority indicator -->
+                  <div class="absolute left-0 top-3 bottom-3 w-0.5 rounded-full"
+                       :class="{
+                         'bg-red-500':    task.priority <= 2,
+                         'bg-orange-500': task.priority === 3 || task.priority === 4,
+                         'bg-gray-600':   task.priority >= 5,
+                       }"></div>
+
+                  <div class="pl-2">
+                    <!-- Skill badge -->
+                    <div class="flex items-center justify-between mb-2">
+                      <span class="flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5"
+                            :style="`background:${skillColor(task.required_skill)}22; color:${skillColor(task.required_skill)}`">
+                        <span x-text="skillIcon(task.required_skill)"></span>
+                        <span x-text="(task.required_skill || 'unassigned').replace('_',' ')"></span>
+                      </span>
+
+                      <!-- Output indicator -->
+                      <template x-if="task.has_output">
+                        <svg class="w-3.5 h-3.5 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
+                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z"/>
+                        </svg>
+                      </template>
+                    </div>
+
+                    <!-- Title -->
+                    <p class="text-sm text-gray-200 leading-snug mb-2" x-text="task.title"></p>
+
+                    <!-- Footer -->
+                    <div class="flex items-center justify-between text-xs text-gray-600">
+                      <span class="font-mono" x-text="task.id"></span>
+                      <!-- Timer for in_progress -->
+                      <template x-if="task.status === 'in_progress' && task.started_at">
+                        <span class="text-blue-500" x-text="elapsed(task.started_at)"></span>
+                      </template>
+                      <!-- Dependency count -->
+                      <template x-if="(task.depends_on || []).length > 0">
+                        <span class="text-yellow-600">⛓ <span x-text="task.depends_on.length"></span></span>
+                      </template>
+                    </div>
+                  </div>
+
+                  <!-- In-progress spinner overlay -->
+                  <template x-if="task.status === 'in_progress'">
+                    <div class="absolute top-2 right-2">
+                      <svg class="w-3 h-3 text-blue-400 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                      </svg>
+                    </div>
+                  </template>
+                </div>
+              </template>
+
+              <!-- Empty state -->
+              <template x-if="(tasks[col.key] || []).length === 0">
+                <div class="border-2 border-dashed border-gray-800 rounded-xl p-4 text-center text-gray-700 text-xs">
+                  Empty
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+
+      </div>
+    </div>
+
+    <!-- Activity feed sidebar -->
+    <div class="w-72 shrink-0 border-l border-gray-800 bg-gray-900/40 flex flex-col overflow-hidden">
+      <div class="px-4 py-3 border-b border-gray-800">
+        <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Agent Activity</h3>
+      </div>
+      <div class="flex-1 overflow-y-auto p-3 space-y-2" id="activity-feed">
+        <template x-for="(item, i) in activity.slice(0, 40)" :key="i">
+          <div class="flex gap-2 text-xs">
+            <span x-text="skillIcon(item.from_agent)" class="shrink-0 mt-0.5"></span>
+            <div>
+              <span class="font-medium" :style="`color:${skillColor(item.from_agent)}`"
+                    x-text="(item.from_agent || '').replace('_',' ')"></span>
+              <span class="text-gray-500"> · </span>
+              <span class="text-gray-400" x-text="item.task_title ? item.task_title.slice(0,30) : ''"></span>
+              <p class="text-gray-500 mt-0.5 leading-relaxed" x-text="item.content.slice(0,100)"></p>
+            </div>
+          </div>
+        </template>
+        <template x-if="activity.length === 0">
+          <p class="text-xs text-gray-700 text-center mt-8">No activity yet</p>
+        </template>
+      </div>
+    </div>
+
+  </div><!-- /flex layout -->
+
+
+  <!-- ── New Task Modal ───────────────────────────────────────────────────── -->
+  <div x-show="showNewTask" x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+       @keydown.escape.window="showNewTask = false">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-lg p-6"
+         @click.stop>
+      <h2 class="text-base font-bold text-white mb-4 flex items-center gap-2">
+        <svg class="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        New Task
+      </h2>
+
+      <!-- Description -->
+      <div class="mb-4">
+        <label class="text-xs text-gray-500 mb-1 block">Describe the task</label>
+        <textarea x-model="newTask.description" rows="3"
+                  placeholder="e.g. Add cursor-based pagination to UserController, write tests, and update OpenAPI docs"
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white
+                         placeholder-gray-500 focus:outline-none focus:border-orange-500 resize-none"></textarea>
+        <p class="text-xs text-gray-600 mt-1">
+          Tip: Leave skill on Auto-route to let Claude pick the best agent. Use Planner for complex multi-step requests.
+        </p>
+      </div>
+
+      <!-- Skill + Priority row -->
+      <div class="grid grid-cols-2 gap-3 mb-4">
+        <div>
+          <label class="text-xs text-gray-500 mb-1 block">Agent skill</label>
+          <select x-model="newTask.skill"
+                  class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white
+                         focus:outline-none focus:border-orange-500">
+            <option value="">Auto-route</option>
+            <option value="planner">🗺️  Planner (decompose complex tasks)</option>
+            <option value="coder">👨‍💻 Coder (implement features)</option>
+            <option value="tester">🧪 Tester (write tests)</option>
+            <option value="reviewer">👁️  Reviewer (code review)</option>
+            <option value="db_optimizer">🗄️  DB Optimizer (fix N+1, indexes)</option>
+            <option value="documenter">📝 Documenter (JavaDoc, OpenAPI)</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 mb-1 block">Priority (1=urgent, 10=low)</label>
+          <input x-model="newTask.priority" type="number" min="1" max="10"
+                 class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white
+                        focus:outline-none focus:border-orange-500"/>
+        </div>
+      </div>
+
+      <!-- Buttons -->
+      <div class="flex gap-3 justify-end">
+        <button @click="showNewTask = false"
+                class="px-4 py-2 rounded-lg text-sm text-gray-400 hover:text-white transition">
+          Cancel
+        </button>
+        <button @click="createTask()"
+                :disabled="!newTask.description.trim() || creating"
+                class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
+                       bg-orange-600 hover:bg-orange-500 disabled:opacity-40 text-white transition">
+          <template x-if="!creating"><span>Create Task</span></template>
+          <template x-if="creating">
+            <span class="flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>
+              Creating…
+            </span>
+          </template>
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ── Task Detail Modal ────────────────────────────────────────────────── -->
+  <div x-show="selectedTask" x-cloak
+       class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+       @keydown.escape.window="selectedTask = null">
+    <div class="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col"
+         @click.stop>
+      <template x-if="selectedTask">
+        <div class="flex flex-col h-full overflow-hidden">
+          <!-- Header -->
+          <div class="px-6 py-4 border-b border-gray-800 flex items-start justify-between">
+            <div>
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-xs font-mono text-gray-500" x-text="selectedTask.id"></span>
+                <span class="text-xs rounded-full px-2 py-0.5 font-medium"
+                      :style="`background:${statusColor(selectedTask.status)}22; color:${statusColor(selectedTask.status)}`"
+                      x-text="selectedTask.status.replace('_',' ')"></span>
+                <span class="text-xs rounded-full px-2 py-0.5"
+                      :style="`background:${skillColor(selectedTask.required_skill)}22; color:${skillColor(selectedTask.required_skill)}`"
+                      x-text="(selectedTask.required_skill || '?').replace('_',' ')"></span>
+              </div>
+              <h3 class="text-base font-semibold text-white" x-text="selectedTask.title"></h3>
+            </div>
+            <button @click="selectedTask = null" class="text-gray-600 hover:text-gray-400 ml-4 shrink-0">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Body: tabs -->
+          <div class="flex border-b border-gray-800 px-6">
+            <button @click="detailTab = 'output'"
+                    class="text-xs py-2.5 mr-4 border-b-2 transition"
+                    :class="detailTab === 'output' ? 'border-orange-500 text-orange-400' : 'border-transparent text-gray-500 hover:text-gray-300'">
+              Output
+            </button>
+            <button @click="detailTab = 'messages'"
+                    class="text-xs py-2.5 mr-4 border-b-2 transition"
+                    :class="detailTab === 'messages' ? 'border-orange-500 text-orange-400' : 'border-transparent text-gray-500 hover:text-gray-300'">
+              Messages
+              <span x-show="taskMessages.length" class="ml-1 bg-gray-700 rounded-full px-1.5" x-text="taskMessages.length"></span>
+            </button>
+            <button @click="detailTab = 'description'"
+                    class="text-xs py-2.5 border-b-2 transition"
+                    :class="detailTab === 'description' ? 'border-orange-500 text-orange-400' : 'border-transparent text-gray-500 hover:text-gray-300'">
+              Description
+            </button>
+          </div>
+
+          <!-- Tab content -->
+          <div class="flex-1 overflow-y-auto p-6">
+
+            <!-- Output tab -->
+            <template x-if="detailTab === 'output'">
+              <div>
+                <template x-if="selectedTask.output">
+                  <div>
+                    <div class="flex items-center gap-2 mb-3">
+                      <span class="text-xs text-gray-500">Output type:</span>
+                      <span class="text-xs bg-gray-800 text-gray-300 rounded px-2 py-0.5"
+                            x-text="selectedTask.output_type || 'text'"></span>
+                    </div>
+                    <pre class="bg-gray-950 rounded-xl p-4 text-xs text-gray-300 overflow-x-auto whitespace-pre-wrap leading-relaxed font-mono"
+                         x-text="selectedTask.output"></pre>
+                  </div>
+                </template>
+                <template x-if="!selectedTask.output">
+                  <p class="text-sm text-gray-600 text-center py-8">No output yet</p>
+                </template>
+              </div>
+            </template>
+
+            <!-- Messages tab -->
+            <template x-if="detailTab === 'messages'">
+              <div class="space-y-3">
+                <template x-for="msg in taskMessages" :key="msg.id">
+                  <div class="flex gap-3">
+                    <div class="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs"
+                         :style="`background:${skillColor(msg.from_agent)}22`">
+                      <span x-text="skillIcon(msg.from_agent)"></span>
+                    </div>
+                    <div class="flex-1">
+                      <div class="flex items-center gap-2 mb-0.5">
+                        <span class="text-xs font-medium" :style="`color:${skillColor(msg.from_agent)}`"
+                              x-text="msg.from_agent"></span>
+                        <span class="text-xs text-gray-600" x-text="fmtTime(msg.created_at)"></span>
+                        <span class="text-xs bg-gray-800 text-gray-600 rounded px-1.5" x-text="msg.message_type"></span>
+                      </div>
+                      <p class="text-sm text-gray-300 leading-relaxed" x-text="msg.content"></p>
+                    </div>
+                  </div>
+                </template>
+                <template x-if="taskMessages.length === 0">
+                  <p class="text-sm text-gray-600 text-center py-8">No messages yet</p>
+                </template>
+              </div>
+            </template>
+
+            <!-- Description tab -->
+            <template x-if="detailTab === 'description'">
+              <div>
+                <pre class="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed"
+                     x-text="selectedTask.description"></pre>
+              </div>
+            </template>
+          </div>
+
+          <!-- Footer actions -->
+          <div class="px-6 py-4 border-t border-gray-800 flex items-center justify-between">
+            <template x-if="selectedTask.error">
+              <span class="text-xs text-red-400">❌ <span x-text="selectedTask.error?.slice(0,80)"></span></span>
+            </template>
+            <template x-if="!selectedTask.error"><span></span></template>
+
+            <div class="flex gap-2">
+              <template x-if="selectedTask.status === 'review'">
+                <div class="flex gap-2">
+                  <button @click="rejectTask(selectedTask.id)"
+                          class="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-900/50 hover:bg-red-900 border border-red-800 text-red-300 transition">
+                    Request Changes
+                  </button>
+                  <button @click="approveTask(selectedTask.id)"
+                          class="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-700 hover:bg-emerald-600 text-white transition">
+                    ✓ Approve
+                  </button>
+                </div>
+              </template>
+              <button @click="deleteTask(selectedTask.id)"
+                      class="px-3 py-1.5 rounded-lg text-xs text-gray-600 hover:text-red-400 transition">
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+</div><!-- /x-data -->
+
+<script>
+const SKILL_COLORS = {
+  planner:      '#a78bfa',
+  coder:        '#60a5fa',
+  tester:       '#34d399',
+  reviewer:     '#fb923c',
+  db_optimizer: '#f472b6',
+  documenter:   '#facc15',
+  system:       '#6b7280',
+  user:         '#e8e8f0',
+};
+const SKILL_ICONS = {
+  planner:      '🗺️',
+  coder:        '👨‍💻',
+  tester:       '🧪',
+  reviewer:     '👁️',
+  db_optimizer: '🗄️',
+  documenter:   '📝',
+  system:       '⚙️',
+  user:         '👤',
+};
+const STATUS_COLORS = {
+  pending:     '#9ca3af',
+  claimed:     '#facc15',
+  in_progress: '#60a5fa',
+  review:      '#fb923c',
+  done:        '#34d399',
+  blocked:     '#ef4444',
+  failed:      '#f87171',
+};
+
+function springTeam() {
+  return {
+    projectPath: localStorage.getItem('si_team_project') || '',
+    teamRunning: false,
+    agents: [],
+    tasks: {},
+    activity: [],
+    showNewTask: false,
+    creating: false,
+    selectedTask: null,
+    taskMessages: [],
+    detailTab: 'output',
+    _timerTick: 0,
+
+    columns: [
+      { key: 'pending',     label: 'Pending',     color: '#9ca3af' },
+      { key: 'in_progress', label: 'In Progress',  color: '#60a5fa' },
+      { key: 'review',      label: 'Review',       color: '#fb923c' },
+      { key: 'done',        label: 'Done',         color: '#34d399' },
+      { key: 'blocked',     label: 'Blocked',      color: '#ef4444' },
+      { key: 'failed',      label: 'Failed',       color: '#f87171' },
+    ],
+
+    newTask: { description: '', skill: '', priority: 5 },
+
+    init() {
+      this.loadAll();
+      this.connectSSE();
+      // Tick every second for elapsed timers
+      setInterval(() => this._timerTick++, 1000);
+    },
+
+    async loadAll() {
+      await Promise.all([this.loadTasks(), this.loadAgents(), this.loadActivity()]);
+    },
+
+    async loadTasks() {
+      const res = await fetch(`/api/team/tasks?project_path=${encodeURIComponent(this.projectPath)}`);
+      const data = await res.json();
+      this.tasks = data.tasks || {};
+    },
+
+    async loadAgents() {
+      const res = await fetch('/api/team/agents');
+      const data = await res.json();
+      this.agents = data.agents || [];
+      this.teamRunning = this.agents.some(a => a.status === 'working');
+    },
+
+    async loadActivity() {
+      const res = await fetch(`/api/team/activity?project_path=${encodeURIComponent(this.projectPath)}&limit=50`);
+      const data = await res.json();
+      this.activity = data.activity || [];
+    },
+
+    connectSSE() {
+      const url = `/api/team/stream?project_path=${encodeURIComponent(this.projectPath)}`;
+      const es = new EventSource(url);
+
+      es.addEventListener('init', (e) => {
+        const d = JSON.parse(e.data);
+        this.tasks = d.tasks || {};
+      });
+
+      es.addEventListener('task_created', (e) => {
+        const task = JSON.parse(e.data);
+        if (!this.tasks[task.status]) this.tasks[task.status] = [];
+        this.tasks[task.status].push(task);
+      });
+
+      es.addEventListener('task_updated', (e) => {
+        const updated = JSON.parse(e.data);
+        // Remove from all columns then insert into correct one
+        for (const status in this.tasks) {
+          this.tasks[status] = (this.tasks[status] || []).filter(t => t.id !== updated.id);
+        }
+        if (!this.tasks[updated.status]) this.tasks[updated.status] = [];
+        this.tasks[updated.status].push(updated);
+        // Refresh selected task if open
+        if (this.selectedTask && this.selectedTask.id === updated.id) {
+          this.openTask(updated.id);
+        }
+      });
+
+      es.addEventListener('message', (e) => {
+        const msg = JSON.parse(e.data);
+        this.activity.unshift({
+          from_agent: msg.from,
+          task_title: msg.task_id,
+          content: msg.content,
+          message_type: msg.type,
+        });
+        if (this.activity.length > 100) this.activity.pop();
+        // Scroll feed
+        this.$nextTick(() => {
+          const feed = document.getElementById('activity-feed');
+          if (feed) feed.scrollTop = 0;
+        });
+      });
+
+      es.addEventListener('system', (e) => {
+        const d = JSON.parse(e.data);
+        this.activity.unshift({ from_agent: 'system', content: d.message, task_title: '' });
+        if (d.agents) {
+          this.teamRunning = true;
+          this.loadAgents();
+        }
+      });
+
+      es.onerror = () => {
+        setTimeout(() => this.connectSSE(), 5000);
+        es.close();
+      };
+    },
+
+    async startAgents() {
+      if (!this.projectPath.trim()) return;
+      localStorage.setItem('si_team_project', this.projectPath);
+      await fetch('/api/team/start', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ project_path: this.projectPath }),
+      });
+      this.teamRunning = true;
+      await this.loadAgents();
+    },
+
+    async stopAgents() {
+      await fetch('/api/team/stop', { method: 'POST' });
+      this.teamRunning = false;
+      await this.loadAgents();
+    },
+
+    async createTask() {
+      if (!this.newTask.description.trim() || this.creating) return;
+      this.creating = true;
+      try {
+        const res = await fetch('/api/team/tasks', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            description: this.newTask.description,
+            skill: this.newTask.skill || null,
+            priority: this.newTask.priority,
+            project_path: this.projectPath,
+          }),
+        });
+        const data = await res.json();
+        this.showNewTask = false;
+        this.newTask = { description: '', skill: '', priority: 5 };
+        await this.loadTasks();
+      } finally {
+        this.creating = false;
+      }
+    },
+
+    async openTask(taskId) {
+      const res = await fetch(`/api/team/tasks/${taskId}`);
+      const data = await res.json();
+      this.selectedTask = data.task;
+      this.taskMessages = data.messages || [];
+      this.detailTab = data.task?.output ? 'output' : 'messages';
+    },
+
+    async approveTask(taskId) {
+      await fetch(`/api/team/tasks/${taskId}/approve`, { method: 'POST' });
+      this.selectedTask = null;
+      await this.loadTasks();
+    },
+
+    async rejectTask(taskId) {
+      const feedback = prompt('Feedback for the agent (optional):') || '';
+      await fetch(`/api/team/tasks/${taskId}/reject`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ feedback }),
+      });
+      this.selectedTask = null;
+      await this.loadTasks();
+    },
+
+    async deleteTask(taskId) {
+      if (!confirm('Delete this task?')) return;
+      await fetch(`/api/team/tasks/${taskId}`, { method: 'DELETE' });
+      this.selectedTask = null;
+      await this.loadTasks();
+    },
+
+    skillColor(skill) {
+      return SKILL_COLORS[skill] || '#6b7280';
+    },
+
+    skillIcon(skill) {
+      return SKILL_ICONS[skill] || '·';
+    },
+
+    statusColor(status) {
+      return STATUS_COLORS[status] || '#6b7280';
+    },
+
+    elapsed(startTs) {
+      if (!startTs) return '';
+      void this._timerTick;  // reactive dependency
+      const secs = Math.floor(Date.now() / 1000 - startTs);
+      if (secs < 60) return `${secs}s`;
+      const m = Math.floor(secs / 60), s = secs % 60;
+      return `${m}m ${s}s`;
+    },
+
+    fmtTime(ts) {
+      if (!ts) return '';
+      return new Date(ts * 1000).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit', second: '2-digit'});
+    },
+  };
+}
+</script>
+{% endblock %}

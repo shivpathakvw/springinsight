@@ -56,6 +56,8 @@ from ..utils.batch_scanner import (
 )
 from ..rag.indexer import Indexer as RagIndexer
 from ..rag.searcher import Searcher as RagSearcher
+from ..springteam.orchestrator import get_orchestrator
+from ..springteam.models import SpringTeamDB, ALL_SKILLS
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
@@ -921,6 +923,175 @@ async def api_search_graph(fqn: str, project_path: str = ""):
             neighbours = graph.get_neighbours(node["id"], depth=1)
             return {"node": node, "neighbours": neighbours}
     return {"node": None, "neighbours": []}
+
+
+# ── SpringTeam (Pillar 3 Multi-Agent Task Framework) ──────────────────────────
+
+def _team_db(data_dir: Path) -> SpringTeamDB:
+    return SpringTeamDB(str(data_dir / "springinsight.db"))
+
+def _team_orch(data_dir: Path):
+    return get_orchestrator(str(data_dir / "springinsight.db"))
+
+
+@app.get("/tasks", response_class=HTMLResponse)
+async def tasks_page(request: Request):
+    """SpringTeam Kanban board."""
+    return templates.TemplateResponse(request, "tasks.html", {})
+
+
+@app.get("/api/team/tasks")
+async def api_team_tasks(project_path: str = ""):
+    """Return all tasks grouped by status for the Kanban view."""
+    data_dir = _data_dir()
+    db = _team_db(data_dir)
+    resolved = str(Path(project_path).resolve()) if project_path else str(data_dir)
+    grouped = db.list_all_tasks(resolved)
+    stats = db.get_project_stats(resolved)
+    return {"tasks": grouped, "stats": stats}
+
+
+@app.post("/api/team/tasks")
+async def api_create_task(request: Request):
+    """Create a new task, optionally auto-routing to the right agent."""
+    import json as _json
+    data_dir = _data_dir()
+    body = await request.json()
+    project_path = body.get("project_path") or str(data_dir)
+    description  = body.get("description", "").strip()
+    skill        = body.get("skill") or None
+    priority     = int(body.get("priority", 5))
+    context      = body.get("context") or {}
+
+    if not description:
+        return {"error": "description is required"}, 400
+
+    orch = _team_orch(data_dir)
+    orch.project_path = str(Path(project_path).resolve())
+    task_id = await orch.submit(
+        request=description,
+        project_path=project_path,
+        skill=skill,
+        priority=priority,
+        context=context,
+    )
+    return {"task_id": task_id, "task": orch.db.get_task(task_id)}
+
+
+@app.get("/api/team/tasks/{task_id}")
+async def api_get_task(task_id: str):
+    """Get task detail including messages and output."""
+    data_dir = _data_dir()
+    db = _team_db(data_dir)
+    task = db.get_task(task_id)
+    if not task:
+        return {"error": "not found"}
+    messages = db.get_messages(task_id)
+    return {"task": task, "messages": messages}
+
+
+@app.post("/api/team/tasks/{task_id}/approve")
+async def api_approve_task(task_id: str):
+    data_dir = _data_dir()
+    orch = _team_orch(data_dir)
+    ok = orch.approve_task(task_id)
+    return {"ok": ok}
+
+
+@app.post("/api/team/tasks/{task_id}/reject")
+async def api_reject_task(task_id: str, request: Request):
+    data_dir = _data_dir()
+    body = await request.json()
+    feedback = body.get("feedback", "")
+    orch = _team_orch(data_dir)
+    ok = orch.reject_task(task_id, feedback)
+    return {"ok": ok}
+
+
+@app.delete("/api/team/tasks/{task_id}")
+async def api_delete_task(task_id: str):
+    data_dir = _data_dir()
+    db = _team_db(data_dir)
+    db.delete_task(task_id)
+    return {"ok": True}
+
+
+@app.post("/api/team/start")
+async def api_team_start(request: Request):
+    """Start agent workers for a project."""
+    body = await request.json()
+    data_dir = _data_dir()
+    project_path = body.get("project_path") or str(data_dir)
+    skills = body.get("skills") or ALL_SKILLS
+    orch = _team_orch(data_dir)
+    await orch.start(project_path=project_path, skills=skills)
+    return {"ok": True, "agents": skills}
+
+
+@app.post("/api/team/stop")
+async def api_team_stop():
+    """Stop all agent workers."""
+    data_dir = _data_dir()
+    orch = _team_orch(data_dir)
+    await orch.stop()
+    return {"ok": True}
+
+
+@app.get("/api/team/agents")
+async def api_team_agents():
+    """Return current agent status."""
+    data_dir = _data_dir()
+    db = _team_db(data_dir)
+    return {"agents": db.get_agents()}
+
+
+@app.get("/api/team/activity")
+async def api_team_activity(project_path: str = "", limit: int = 30):
+    """Return recent activity feed."""
+    data_dir = _data_dir()
+    db = _team_db(data_dir)
+    resolved = str(Path(project_path).resolve()) if project_path else str(data_dir)
+    activity = db.get_recent_activity(resolved, limit=limit)
+    return {"activity": activity}
+
+
+@app.get("/api/team/stream")
+async def api_team_stream(request: Request):
+    """
+    SSE stream for live Kanban updates.
+    Events: task_created, task_updated, task_log, message, system
+    """
+    data_dir = _data_dir()
+    orch = _team_orch(data_dir)
+
+    async def _event_gen():
+        import json as _json
+        q = orch.subscribe()
+        try:
+            # Send initial state
+            project_path = request.query_params.get("project_path", "")
+            resolved = str(Path(project_path).resolve()) if project_path else str(data_dir)
+            db = _team_db(data_dir)
+            grouped = db.list_all_tasks(resolved)
+            stats = db.get_project_stats(resolved)
+            yield f"event: init\ndata: {_json.dumps({'tasks': grouped, 'stats': stats})}\n\n"
+
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(q.get(), timeout=15.0)
+                    yield f"event: {event['type']}\ndata: {_json.dumps(event['data'])}\n\n"
+                except asyncio.TimeoutError:
+                    yield f"event: ping\ndata: {{}}\n\n"
+        finally:
+            orch.unsubscribe(q)
+
+    return StreamingResponse(
+        _event_gen(),
+        media_type="text/event-stream",
+        headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+    )
 
 
 # ── Settings: Project Context ─────────────────────────────────────────────────
