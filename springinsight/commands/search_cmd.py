@@ -17,11 +17,6 @@ from pathlib import Path
 
 import click
 
-from ..db.store import DB_PATH            # reuse existing DB path helper
-from ..utils.logging import get_logger    # noqa: F401
-
-log = get_logger(__name__)
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
