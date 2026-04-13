@@ -56,6 +56,10 @@ dependencies = [
     "packaging>=24.0",
     # .env file support (optional — falls back to built-in parser)
     "python-dotenv>=1.0,<2; python_version>='3.10'",
+    # Pillar 2: CodeSearch RAG
+    "chromadb>=0.5,<2",
+    "sentence-transformers>=3.0,<4",
+    "javalang>=0.13,<1",
 ]
 
 [project.optional-dependencies]

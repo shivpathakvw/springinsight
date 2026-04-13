@@ -54,6 +54,8 @@ from ..utils.cost_estimator import count_project_files, estimate_scan_cost, sele
 from ..utils.batch_scanner import (
     detect_large_project, create_batch_plan, LARGE_PROJECT_THRESHOLD,
 )
+from ..rag.indexer import Indexer as RagIndexer
+from ..rag.searcher import Searcher as RagSearcher
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 
@@ -773,6 +775,152 @@ async def health():
 async def reverse_page(request: Request):
     """Reverse Engineering UI — A18 agent launcher."""
     return templates.TemplateResponse(request, "reverse.html", {})
+
+
+# ── CodeSearch (Pillar 2 RAG) ─────────────────────────────────────────────────
+
+def _rag_indexer(data_dir: Path) -> RagIndexer:
+    return RagIndexer(
+        db_path=str(data_dir / "springinsight.db"),
+        chroma_dir=str(data_dir / "chroma"),
+    )
+
+def _rag_searcher(data_dir: Path) -> RagSearcher:
+    return RagSearcher(
+        db_path=str(data_dir / "springinsight.db"),
+        chroma_dir=str(data_dir / "chroma"),
+    )
+
+
+@app.get("/search", response_class=HTMLResponse)
+async def search_page(request: Request):
+    """CodeSearch UI — semantic natural-language search over a Spring Boot codebase."""
+    return templates.TemplateResponse(request, "search.html", {})
+
+
+@app.get("/api/search/status")
+async def api_search_status(project_path: str = ""):
+    """Return indexing status for a project."""
+    data_dir = _data_dir()
+    indexer = _rag_indexer(data_dir)
+    resolved = str(Path(project_path).resolve()) if project_path else ""
+    if not resolved:
+        return {"status": "no_project"}
+    status = indexer.get_status(resolved)
+    return status
+
+
+@app.get("/api/search/index")
+async def api_search_index(request: Request):
+    """
+    SSE stream: index a project.
+    Query params: repo_url (git URL or local path)
+    Events: { "type": "progress", "data": {...} }
+             { "type": "done", "data": {...} }
+             { "type": "error", "data": {"message": "..."} }
+    """
+    repo_url = request.query_params.get("repo_url", "").strip()
+    if not repo_url:
+        async def _err():
+            yield "data: " + '{"type":"error","data":{"message":"repo_url is required"}}\n\n'
+        return StreamingResponse(_err(), media_type="text/event-stream")
+
+    data_dir = _data_dir()
+
+    async def _event_gen():
+        import json as _json
+        from ..utils.github import resolve_project_path as _resolve
+
+        try:
+            # Resolve repo (clone if git URL, resolve if local path)
+            project_path = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: _resolve(repo_url, str(data_dir / "repos"))
+            )
+        except Exception as e:
+            yield f"data: {_json.dumps({'type':'error','data':{'message':str(e)}})}\n\n"
+            return
+
+        indexer = _rag_indexer(data_dir)
+        try:
+            async for progress in indexer.index(project_path):
+                payload = _json.dumps({
+                    "type": "done" if progress.phase == "done" else
+                            "error" if progress.phase == "error" else "progress",
+                    "data": progress.to_dict(),
+                })
+                yield f"data: {payload}\n\n"
+                if progress.phase in ("done", "error"):
+                    return
+        except Exception as e:
+            import traceback
+            yield f"data: {_json.dumps({'type':'error','data':{'message':str(e)}})}\n\n"
+
+    return StreamingResponse(_event_gen(), media_type="text/event-stream",
+                             headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})
+
+
+@app.get("/api/search/ask")
+async def api_search_ask(request: Request):
+    """
+    SSE stream: semantic search + Claude answer.
+    Query params: project_path, query
+    Events:
+      data: {"type":"sources","data":[...]}
+      data: {"type":"token","data":"<text>"}
+      data: {"type":"done"}
+      data: {"type":"error","data":{"message":"..."}}
+    """
+    project_path = request.query_params.get("project_path", "").strip()
+    query = request.query_params.get("query", "").strip()
+
+    if not query:
+        async def _err():
+            import json as _j
+            yield f"data: {_j.dumps({'type':'error','data':{'message':'query is required'}})}\n\n"
+        return StreamingResponse(_err(), media_type="text/event-stream")
+
+    data_dir = _data_dir()
+    if not project_path:
+        project_path = str(data_dir)
+
+    async def _event_gen():
+        import json as _json
+        searcher = _rag_searcher(data_dir)
+        try:
+            async for token in searcher.stream_search(project_path, query):
+                if token.startswith("sources:"):
+                    sources_json = token[len("sources:"):]
+                    yield f"data: {_json.dumps({'type':'sources','data':_json.loads(sources_json)})}\n\n"
+                elif token == "DONE":
+                    yield f"data: {_json.dumps({'type':'done'})}\n\n"
+                    return
+                elif token.startswith("ERROR:"):
+                    msg = token[6:]
+                    yield f"data: {_json.dumps({'type':'error','data':{'message':msg}})}\n\n"
+                    return
+                else:
+                    yield f"data: {_json.dumps({'type':'token','data':token})}\n\n"
+        except Exception as e:
+            yield f"data: {_json.dumps({'type':'error','data':{'message':str(e)}})}\n\n"
+
+    return StreamingResponse(_event_gen(), media_type="text/event-stream",
+                             headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"})
+
+
+@app.get("/api/search/graph/{fqn:path}")
+async def api_search_graph(fqn: str, project_path: str = ""):
+    """Return a node + its direct neighbours from the code graph."""
+    data_dir = _data_dir()
+    from ..rag.code_graph import CodeGraph
+    graph = CodeGraph(str(data_dir / "springinsight.db"))
+    resolved = str(Path(project_path).resolve()) if project_path else ""
+    if resolved:
+        nodes = graph.search_by_name(resolved, fqn.split(".")[-1])
+        if nodes:
+            node = nodes[0]
+            neighbours = graph.get_neighbours(node["id"], depth=1)
+            return {"node": node, "neighbours": neighbours}
+    return {"node": None, "neighbours": []}
 
 
 # ── Settings: Project Context ─────────────────────────────────────────────────

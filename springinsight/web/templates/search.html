@@ -1,0 +1,425 @@
+{% extends "base.html" %}
+{% block title %}CodeSearch — Semantic Code Intelligence{% endblock %}
+{% block nav_search %}active{% endblock %}
+
+{% block content %}
+<div x-data="codeSearch()" x-init="init()" class="min-h-screen bg-gray-950 text-gray-100">
+
+  <!-- ── Header ──────────────────────────────────────────────────────────── -->
+  <div class="border-b border-gray-800 bg-gray-900/60 backdrop-blur px-6 py-4">
+    <div class="max-w-5xl mx-auto flex items-center justify-between gap-4">
+      <div>
+        <h1 class="text-xl font-bold text-white flex items-center gap-2">
+          <svg class="w-6 h-6 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"/>
+          </svg>
+          CodeSearch
+        </h1>
+        <p class="text-xs text-gray-500 mt-0.5">Semantic natural-language search over your Spring Boot codebase</p>
+      </div>
+
+      <!-- Index status badge -->
+      <div class="flex items-center gap-3">
+        <template x-if="indexState.status === 'ready'">
+          <span class="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-950/60 border border-emerald-800 rounded-full px-3 py-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            Indexed · <span x-text="indexState.chunk_count || '?'"></span> chunks
+          </span>
+        </template>
+        <template x-if="indexState.status !== 'ready'">
+          <span class="flex items-center gap-1.5 text-xs text-yellow-400 bg-yellow-950/60 border border-yellow-800 rounded-full px-3 py-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-yellow-400"></span>
+            Not indexed
+          </span>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <div class="max-w-5xl mx-auto px-6 py-6 space-y-6">
+
+    <!-- ── Index Panel ───────────────────────────────────────────────────── -->
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-sm font-semibold text-gray-300 flex items-center gap-2">
+          <svg class="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582 4-8 4"/>
+          </svg>
+          Index Project
+        </h2>
+        <!-- Stats pills when indexed -->
+        <template x-if="indexState.status === 'ready'">
+          <div class="flex items-center gap-2 text-xs text-gray-500">
+            <span class="bg-gray-800 rounded px-2 py-0.5">
+              <span class="text-violet-400" x-text="indexState.nodes || 0"></span> nodes
+            </span>
+            <span class="bg-gray-800 rounded px-2 py-0.5">
+              <span class="text-blue-400" x-text="indexState.edges || 0"></span> edges
+            </span>
+            <span class="bg-gray-800 rounded px-2 py-0.5">
+              <span class="text-emerald-400" x-text="indexState.chunk_count || 0"></span> chunks
+            </span>
+          </div>
+        </template>
+      </div>
+
+      <div class="flex gap-3">
+        <input x-model="repoUrl"
+               type="text"
+               placeholder="GitHub URL or local path  (e.g. https://github.com/org/my-spring-app)"
+               class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white
+                      placeholder-gray-500 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/40"
+               @keydown.enter="startIndex()"/>
+        <button @click="startIndex()"
+                :disabled="!repoUrl.trim() || indexing"
+                class="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition
+                       bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white">
+          <template x-if="!indexing">
+            <span class="flex items-center gap-1.5">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+              </svg>
+              Index
+            </span>
+          </template>
+          <template x-if="indexing">
+            <span class="flex items-center gap-1.5">
+              <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>
+              Indexing…
+            </span>
+          </template>
+        </button>
+      </div>
+
+      <!-- Indexing progress -->
+      <template x-if="indexing || indexLog.length > 0">
+        <div class="mt-4 space-y-1">
+          <template x-for="entry in indexLog" :key="entry.id">
+            <div class="flex items-start gap-2 text-xs" :class="{
+              'text-emerald-400': entry.phase === 'done',
+              'text-red-400': entry.phase === 'error',
+              'text-gray-400': !['done','error'].includes(entry.phase)
+            }">
+              <span x-text="entry.icon" class="mt-0.5 shrink-0"></span>
+              <span x-text="entry.message"></span>
+              <template x-if="entry.pct > 0 && entry.pct < 100">
+                <span class="ml-auto text-gray-600" x-text="entry.pct + '%'"></span>
+              </template>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+
+    <!-- ── Search Box ────────────────────────────────────────────────────── -->
+    <div class="bg-gray-900 border border-gray-800 rounded-xl p-5">
+      <div class="flex gap-3">
+        <div class="flex-1 relative">
+          <svg class="absolute left-3.5 top-3 w-4 h-4 text-gray-500 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"/>
+          </svg>
+          <input x-model="query"
+                 type="text"
+                 placeholder="Ask anything about the codebase…"
+                 class="w-full bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-2.5 text-sm text-white
+                        placeholder-gray-500 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/40"
+                 @keydown.enter="runSearch()"/>
+        </div>
+        <button @click="runSearch()"
+                :disabled="!query.trim() || searching || indexState.status !== 'ready'"
+                class="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition
+                       bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white">
+          <template x-if="!searching">
+            <span>Ask</span>
+          </template>
+          <template x-if="searching">
+            <span class="flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>
+              Thinking…
+            </span>
+          </template>
+        </button>
+      </div>
+
+      <!-- Example queries -->
+      <div class="mt-3 flex flex-wrap gap-2">
+        <span class="text-xs text-gray-600 mt-1">Try:</span>
+        <template x-for="ex in examples" :key="ex">
+          <button @click="query = ex; runSearch()"
+                  :disabled="searching || indexState.status !== 'ready'"
+                  class="text-xs bg-gray-800 border border-gray-700 hover:border-violet-600 hover:text-violet-300
+                         text-gray-400 rounded-full px-3 py-1 transition disabled:opacity-30">
+            <span x-text="ex"></span>
+          </button>
+        </template>
+      </div>
+    </div>
+
+    <!-- ── Conversation / Results ────────────────────────────────────────── -->
+    <div class="space-y-4">
+      <template x-for="(turn, idx) in conversation" :key="idx">
+        <div class="space-y-3">
+
+          <!-- User turn -->
+          <div class="flex justify-end">
+            <div class="bg-violet-900/40 border border-violet-800/50 rounded-2xl rounded-tr-sm
+                        px-4 py-3 text-sm text-white max-w-2xl">
+              <span x-text="turn.query"></span>
+            </div>
+          </div>
+
+          <!-- Assistant turn -->
+          <div class="flex gap-3">
+            <div class="shrink-0 w-8 h-8 rounded-full bg-violet-900/60 border border-violet-700/50
+                        flex items-center justify-center">
+              <svg class="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+              </svg>
+            </div>
+            <div class="flex-1 space-y-3">
+              <!-- Answer -->
+              <div class="bg-gray-900 border border-gray-800 rounded-2xl rounded-tl-sm px-5 py-4">
+                <template x-if="turn.streaming">
+                  <div class="text-sm text-gray-300 whitespace-pre-wrap font-mono leading-relaxed"
+                       x-text="turn.answer || ''">
+                  </div>
+                </template>
+                <template x-if="!turn.streaming && turn.answer">
+                  <div class="prose prose-invert prose-sm max-w-none text-gray-300"
+                       x-html="renderMarkdown(turn.answer)">
+                  </div>
+                </template>
+                <template x-if="turn.streaming && !turn.answer">
+                  <div class="flex items-center gap-2 text-gray-500 text-sm">
+                    <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                    </svg>
+                    Searching codebase…
+                  </div>
+                </template>
+              </div>
+
+              <!-- Sources -->
+              <template x-if="turn.sources && turn.sources.length > 0">
+                <div>
+                  <p class="text-xs text-gray-600 mb-2 ml-1">Sources</p>
+                  <div class="flex flex-wrap gap-2">
+                    <template x-for="(src, si) in turn.sources.slice(0, 6)" :key="si">
+                      <div class="group relative">
+                        <div class="flex items-center gap-1.5 bg-gray-800 border border-gray-700
+                                    hover:border-violet-600 rounded-lg px-3 py-2 cursor-pointer transition"
+                             @click="turn.openSource = turn.openSource === si ? null : si">
+                          <!-- Type badge -->
+                          <span class="text-xs font-mono font-bold"
+                                :class="{
+                                  'text-blue-400':   src.node_type === 'class',
+                                  'text-emerald-400': src.node_type === 'method',
+                                  'text-orange-400': src.node_type === 'endpoint',
+                                  'text-purple-400': src.node_type === 'field',
+                                  'text-gray-400':   src.node_type === 'config',
+                                }"
+                                x-text="src.node_type.toUpperCase()"></span>
+                          <span class="text-xs text-gray-300" x-text="src.simple_name"></span>
+                          <!-- Score bar -->
+                          <div class="flex gap-px ml-1">
+                            <template x-for="b in 5" :key="b">
+                              <div class="w-1 h-2.5 rounded-sm"
+                                   :class="b <= Math.round(src.score * 5) ? 'bg-violet-500' : 'bg-gray-700'">
+                              </div>
+                            </template>
+                          </div>
+                        </div>
+                        <!-- Expanded source card -->
+                        <template x-if="turn.openSource === si">
+                          <div class="absolute z-10 top-full mt-1 left-0 w-80 bg-gray-900 border border-violet-700/50
+                                      rounded-xl shadow-2xl p-4 text-xs space-y-2">
+                            <div class="flex items-center justify-between">
+                              <span class="font-semibold text-violet-300" x-text="src.fqn"></span>
+                              <span class="text-gray-500" x-text="Math.round(src.score * 100) + '% match'"></span>
+                            </div>
+                            <div class="text-gray-500">
+                              <span x-text="src.file_path"></span>
+                              <span x-show="src.line_start">:<span x-text="src.line_start"></span></span>
+                            </div>
+                            <pre class="bg-gray-950 rounded p-2 text-gray-400 overflow-x-auto whitespace-pre-wrap text-xs leading-relaxed"
+                                 x-text="src.snippet"></pre>
+                          </div>
+                        </template>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </template>
+
+            </div>
+          </div>
+
+        </div>
+      </template>
+
+      <!-- Empty state -->
+      <template x-if="conversation.length === 0">
+        <div class="text-center py-16 text-gray-700">
+          <svg class="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1"
+                  d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"/>
+          </svg>
+          <p class="text-lg font-medium text-gray-600">Ask anything about the codebase</p>
+          <p class="text-sm mt-1">Index a project above, then ask natural-language questions</p>
+        </div>
+      </template>
+    </div>
+
+  </div><!-- /max-w-5xl -->
+</div><!-- /x-data -->
+
+<!-- Marked.js for markdown rendering -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<script>
+function codeSearch() {
+  return {
+    repoUrl: '',
+    query: '',
+    indexing: false,
+    searching: false,
+    indexLog: [],
+    indexState: { status: 'unknown' },
+    conversation: [],
+
+    examples: [
+      'Which classes handle payment retry logic?',
+      'Show all @Transactional methods that touch the order repository',
+      'How is JWT authentication implemented?',
+      'Which endpoints have no @PreAuthorize security?',
+      'What Spring beans are wired into the UserService?',
+    ],
+
+    init() {
+      // Try to load index state from local storage
+      const saved = localStorage.getItem('si_search_repo');
+      if (saved) this.repoUrl = saved;
+      this.checkStatus();
+    },
+
+    async checkStatus() {
+      if (!this.repoUrl) return;
+      try {
+        const res = await fetch(`/api/search/status?project_path=${encodeURIComponent(this.repoUrl)}`);
+        this.indexState = await res.json();
+      } catch {}
+    },
+
+    startIndex() {
+      if (!this.repoUrl.trim() || this.indexing) return;
+      localStorage.setItem('si_search_repo', this.repoUrl);
+      this.indexing = true;
+      this.indexLog = [];
+      this.indexState = { status: 'indexing' };
+
+      const es = new EventSource(`/api/search/index?repo_url=${encodeURIComponent(this.repoUrl)}`);
+      let logId = 0;
+
+      es.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        const d = msg.data || {};
+        const phase = d.phase || msg.type;
+        const icons = { scan: '🔍', graph: '🕸️', embed: '🔮', done: '✅', error: '❌', progress: '⟳' };
+        const icon = icons[phase] || '·';
+
+        // Update or append log entry for this phase
+        const existing = this.indexLog.findIndex(l => l.phase === phase);
+        const entry = { id: logId++, phase, icon, message: d.message || '', pct: d.pct || 0 };
+        if (existing >= 0) {
+          this.indexLog.splice(existing, 1, entry);
+        } else {
+          this.indexLog.push(entry);
+        }
+
+        if (msg.type === 'done') {
+          this.indexing = false;
+          es.close();
+          this.checkStatus();
+        } else if (msg.type === 'error') {
+          this.indexing = false;
+          es.close();
+        }
+      };
+
+      es.onerror = () => {
+        this.indexing = false;
+        this.indexLog.push({ id: 9999, phase: 'error', icon: '❌', message: 'Connection lost', pct: 0 });
+        es.close();
+      };
+    },
+
+    runSearch() {
+      if (!this.query.trim() || this.searching) return;
+      const q = this.query.trim();
+      this.query = '';
+      this.searching = true;
+
+      const turn = {
+        query: q,
+        answer: '',
+        sources: [],
+        streaming: true,
+        openSource: null,
+      };
+      this.conversation.push(turn);
+
+      const projectPath = this.repoUrl;
+      const url = `/api/search/ask?query=${encodeURIComponent(q)}&project_path=${encodeURIComponent(projectPath)}`;
+      const es = new EventSource(url);
+
+      es.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'sources') {
+          turn.sources = msg.data || [];
+        } else if (msg.type === 'token') {
+          turn.answer = (turn.answer || '') + (msg.data || '');
+        } else if (msg.type === 'done') {
+          turn.streaming = false;
+          this.searching = false;
+          es.close();
+        } else if (msg.type === 'error') {
+          turn.answer = '⚠️ ' + (msg.data?.message || 'Search failed');
+          turn.streaming = false;
+          this.searching = false;
+          es.close();
+        }
+      };
+
+      es.onerror = () => {
+        turn.streaming = false;
+        this.searching = false;
+        if (!turn.answer) turn.answer = '⚠️ Connection error';
+        es.close();
+      };
+    },
+
+    renderMarkdown(text) {
+      if (!text) return '';
+      if (typeof marked !== 'undefined') {
+        try {
+          return marked.parse(text, { breaks: true, gfm: true });
+        } catch { }
+      }
+      // Fallback: escape and preserve newlines
+      return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>');
+    },
+  };
+}
+</script>
+{% endblock %}
