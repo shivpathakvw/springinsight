@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <!-- ── Primary SEO ─────────────────────────────────────────────────────── -->
-  <title>SpringInsight — AI Code Review for Spring Boot | 17 Agents, Free &amp; Open Source</title>
-  <meta name="description" content="SpringInsight scans any Spring Boot codebase in under 60 seconds. 17 AI agents detect CVEs, OWASP vulnerabilities, N+1 queries, race conditions, dead code, NFR bottlenecks and Spring Boot 3.x/4.0 upgrade blockers. Free, open-source, runs locally." />
-  <meta name="keywords" content="spring boot code review, spring boot security scanner, spring boot ai, java static analysis, N+1 query detector, spring boot upgrade advisor, OWASP spring boot, java code quality, spring boot 4.0 migration, AI code review java" />
+  <title>SpringInsight — AI Intelligence Suite for Spring Boot | Code Review · Semantic Search · Multi-Agent Tasks</title>
+  <meta name="description" content="SpringInsight is an open-source AI intelligence suite for Spring Boot. 18 agents detect CVEs, N+1 queries, security holes and upgrade blockers. CodeSearch answers natural-language questions about your codebase. SpringTeam executes tasks with 6 specialist agents. Free, runs locally." />
+  <meta name="keywords" content="spring boot code review, spring boot ai, spring boot semantic search, code intelligence, AI code review java, spring boot security scanner, N+1 query detector, java static analysis, spring boot 4.0 migration, multi-agent coding, RAG codebase search" />
   <meta name="robots" content="index, follow" />
   <link rel="canonical" href="https://springinsight.dev/" />
   <link rel="sitemap" type="application/xml" title="Sitemap" href="/sitemap.xml" />
@@ -16,8 +16,8 @@
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://springinsight.dev/" />
   <meta property="og:site_name" content="SpringInsight" />
-  <meta property="og:title" content="SpringInsight — AI Code Review for Spring Boot" />
-  <meta property="og:description" content="17 AI agents find CVEs, security holes, N+1 queries, race conditions and upgrade blockers in any Spring Boot repo — in under 60 seconds. Free &amp; open-source." />
+  <meta property="og:title" content="SpringInsight — AI Intelligence Suite for Spring Boot" />
+  <meta property="og:description" content="18 AI agents · CodeSearch RAG · SpringTeam multi-agent tasks. The complete AI toolkit for Spring Boot teams. Free &amp; open-source." />
   <meta property="og:image" content="https://springinsight.dev/og-image.png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
@@ -54,7 +54,7 @@
         "description": "AI-powered code review tool for Spring Boot. 17 specialized agents detect security vulnerabilities, performance issues, and upgrade blockers in seconds.",
         "applicationCategory": "DeveloperApplication",
         "operatingSystem": "Linux, macOS, Windows",
-        "softwareVersion": "0.5.0",
+        "softwareVersion": "0.6.0",
         "offers": {
           "@type": "Offer",
           "price": "0",
@@ -577,11 +577,139 @@
     /* ── Divider ──────────────────────────────────────────────────────────── */
     hr { border: none; border-top: 1px solid var(--border); }
 
+    /* ── Three Pillars ────────────────────────────────────────────────────── */
+    .pillars-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin-top: 3rem;
+    }
+    .pillar-card {
+      border-radius: 16px;
+      padding: 2rem;
+      border: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+      transition: transform .2s, border-color .2s;
+    }
+    .pillar-card:hover { transform: translateY(-3px); }
+    .pillar-card-1 { background: linear-gradient(135deg, rgba(34,197,94,.07) 0%, rgba(34,197,94,.02) 100%); border-color: rgba(34,197,94,.25); }
+    .pillar-card-2 { background: linear-gradient(135deg, rgba(168,85,247,.07) 0%, rgba(168,85,247,.02) 100%); border-color: rgba(168,85,247,.25); }
+    .pillar-card-3 { background: linear-gradient(135deg, rgba(249,115,22,.07) 0%, rgba(249,115,22,.02) 100%); border-color: rgba(249,115,22,.25); }
+    .pillar-card-1:hover { border-color: rgba(34,197,94,.5); }
+    .pillar-card-2:hover { border-color: rgba(168,85,247,.5); }
+    .pillar-card-3:hover { border-color: rgba(249,115,22,.5); }
+    .pillar-num {
+      font-size: .7rem; font-weight: 800; letter-spacing: .12em;
+      text-transform: uppercase; margin-bottom: .75rem;
+    }
+    .pillar-num-1 { color: var(--green); }
+    .pillar-num-2 { color: var(--purple); }
+    .pillar-num-3 { color: var(--orange); }
+    .pillar-icon { font-size: 2.25rem; margin-bottom: 1rem; }
+    .pillar-title { font-size: 1.4rem; font-weight: 800; margin-bottom: .6rem; }
+    .pillar-sub { font-size: .9rem; color: var(--text-mid); line-height: 1.65; margin-bottom: 1.25rem; }
+    .pillar-features { list-style: none; display: flex; flex-direction: column; gap: .45rem; margin-bottom: 1.5rem; }
+    .pillar-features li { font-size: .82rem; color: var(--text-mid); display: flex; gap: .5rem; }
+    .pillar-features li .pi { flex-shrink: 0; }
+    .pillar-cmd {
+      font-family: var(--mono); font-size: .78rem;
+      background: rgba(0,0,0,.3);
+      border-radius: 8px; padding: .75rem 1rem;
+      color: var(--text-mid);
+    }
+    .pillar-cmd .prompt { color: var(--green); }
+
+    /* ── CodeSearch showcase ──────────────────────────────────────────────── */
+    .chat-mockup {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .chat-header {
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      padding: .75rem 1.25rem;
+      display: flex; align-items: center; gap: .75rem;
+      font-size: .8rem; color: var(--text-mid);
+    }
+    .chat-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .chat-body { padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
+    .chat-q {
+      align-self: flex-end;
+      background: rgba(168,85,247,.15);
+      border: 1px solid rgba(168,85,247,.25);
+      border-radius: 12px 12px 3px 12px;
+      padding: .65rem 1rem;
+      font-size: .85rem; color: var(--text); max-width: 90%;
+    }
+    .chat-a {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 3px 12px 12px 12px;
+      padding: .75rem 1rem;
+      font-size: .82rem; color: var(--text-mid); line-height: 1.6;
+    }
+    .chat-source {
+      display: inline-flex; align-items: center; gap: .4rem;
+      font-family: var(--mono); font-size: .72rem;
+      background: rgba(59,130,246,.1); border: 1px solid rgba(59,130,246,.2);
+      border-radius: 6px; padding: 2px 8px; margin-right: .4rem; margin-top: .5rem;
+      color: var(--blue);
+    }
+
+    /* ── SpringTeam mockup ────────────────────────────────────────────────── */
+    .kanban-mockup {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.25rem;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: .75rem;
+    }
+    .kb-col-head {
+      font-size: .65rem; font-weight: 800; letter-spacing: .1em;
+      text-transform: uppercase; padding: 0 0 .5rem;
+      border-bottom: 2px solid;
+      margin-bottom: .5rem;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .kb-pending  { color: #9ca3af; border-color: #374151; }
+    .kb-progress { color: #60a5fa; border-color: rgba(96,165,250,.4); }
+    .kb-review   { color: #fb923c; border-color: rgba(251,146,60,.4); }
+    .kb-done     { color: #34d399; border-color: rgba(52,211,153,.4); }
+    .kb-card {
+      border-radius: 8px; padding: .65rem .75rem;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      margin-bottom: .5rem; font-size: .75rem;
+    }
+    .kb-badge {
+      font-size: .62rem; font-weight: 700; letter-spacing: .05em;
+      border-radius: 4px; padding: 1px 6px; margin-bottom: .35rem; display: inline-block;
+    }
+    .kb-title { color: var(--text); line-height: 1.4; margin-bottom: .3rem; }
+    .kb-meta { color: var(--text-dim); display: flex; align-items: center; gap: .4rem; }
+    .kb-pulse { width: 5px; height: 5px; border-radius: 50%; background: #60a5fa; animation: pulse 1.5s infinite; display: inline-block; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+
+    /* ── Feature highlight banner ─────────────────────────────────────────── */
+    .feature-banner {
+      border-radius: 14px; padding: 2rem;
+      display: flex; align-items: flex-start; gap: 1.5rem;
+    }
+    .feature-banner-icon { font-size: 2.5rem; flex-shrink: 0; line-height: 1; }
+    .feature-banner-body h3 { font-size: 1.15rem; font-weight: 800; margin-bottom: .4rem; }
+    .feature-banner-body p { font-size: .875rem; color: var(--text-mid); line-height: 1.65; }
+
     /* ── Responsive ───────────────────────────────────────────────────────── */
     @media (max-width: 640px) {
       .nav-links { display: none; }
       .hero { padding: 4rem 0 3rem; }
       .section { padding: 3.5rem 0; }
+      .kanban-mockup { grid-template-columns: repeat(2,1fr); }
     }
   </style>
 </head>
@@ -595,9 +723,10 @@
   <div class="container nav-inner">
     <a class="nav-logo" href="#" style="text-decoration:none" aria-label="SpringInsight home">🍃 Spring<span>Insight</span></a>
     <div class="nav-links">
+      <a href="#pillars">Pillars</a>
       <a href="#agents">Agents</a>
-      <a href="#layers">Intelligence</a>
-      <a href="#how">How It Works</a>
+      <a href="#codesearch">CodeSearch</a>
+      <a href="#springteam">SpringTeam</a>
       <a href="#compare">Compare</a>
       <a href="#access">Get Access</a>
       <a href="https://github.com/shivpathakvw/springinsight" target="_blank" rel="noopener noreferrer">GitHub</a>
@@ -613,16 +742,15 @@
   <div class="container">
     <div class="hero-eyebrow">
       <span>✦</span>
-      <span>Open Source · MIT · v0.5.0</span>
+      <span>Open Source · MIT · v0.6.0 · Three Pillars</span>
     </div>
 
     <h1 class="hero-title">
-      Understand any <em>Spring Boot</em><br/>codebase in seconds
+      The AI intelligence suite<br/>for <em>Spring Boot</em> teams
     </h1>
     <p class="hero-sub">
-      17 AI agents scan your Java project for CVEs, OWASP Top 10 vulnerabilities, N+1 queries,
-      race conditions, dead code, NFR bottlenecks, and Spring Boot upgrade blockers — in one command.
-      Supports Spring Boot 2.7 through 4.0 with auto-version detection.
+      18 specialized agents review your code. Semantic CodeSearch answers any question about your codebase.
+      SpringTeam's 6 expert agents execute tasks autonomously. Three pillars — one command away.
     </p>
 
     <div class="hero-ctas">
@@ -636,21 +764,25 @@
 
     <div class="hero-install">
       <span class="prompt">$</span>
-      <span class="cmd">springinsight run https://github.com/your-org/your-spring-app</span>
+      <span class="cmd">springinsight run ./app &nbsp;&amp;&amp;&nbsp; springinsight search ask "explain my auth flow" &nbsp;&amp;&amp;&nbsp; springinsight team task "add rate limiting"</span>
     </div>
 
     <div class="hero-stats">
       <div class="hero-stat">
-        <div class="hero-stat-num">17</div>
+        <div class="hero-stat-num">18</div>
         <div class="hero-stat-label">AI agents</div>
       </div>
       <div class="hero-stat">
-        <div class="hero-stat-num">3.5/4.0</div>
-        <div class="hero-stat-label">Spring Boot</div>
+        <div class="hero-stat-num">3</div>
+        <div class="hero-stat-label">pillars</div>
       </div>
       <div class="hero-stat">
         <div class="hero-stat-num">&lt;60s</div>
         <div class="hero-stat-label">first scan</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-stat-num">RAG</div>
+        <div class="hero-stat-label">code search</div>
       </div>
       <div class="hero-stat">
         <div class="hero-stat-num">MIT</div>
@@ -666,12 +798,81 @@
 
 <hr />
 
+<!-- ── THREE PILLARS ─────────────────────────────────────────────────────── -->
+<section class="section" id="pillars">
+  <div class="container">
+    <div class="section-label">01 Three Pillars</div>
+    <h2 class="section-title">Everything your team needs<br/>to own your Spring Boot codebase</h2>
+    <p class="section-sub">SpringInsight is built around three complementary capabilities that together give you unprecedented visibility, understanding, and control over your codebase.</p>
+
+    <div class="pillars-grid">
+
+      <!-- Pillar 1 -->
+      <div class="pillar-card pillar-card-1">
+        <div class="pillar-num pillar-num-1">Pillar 01</div>
+        <div class="pillar-icon">🔬</div>
+        <div class="pillar-title">AI Code Review</div>
+        <div class="pillar-sub">18 specialized agents scan your entire Spring Boot project for security vulnerabilities, performance bottlenecks, and architectural issues — in a single command.</div>
+        <ul class="pillar-features">
+          <li><span class="pi">🛡️</span> OWASP Top 10, CVEs, SpEL injection, mass assignment</li>
+          <li><span class="pi">⚡</span> N+1 detection, caching gaps, thread pool misconfiguration</li>
+          <li><span class="pi">🔄</span> @Transactional correctness, race conditions, ThreadLocal leaks</li>
+          <li><span class="pi">🚀</span> Spring Boot 3.x → 4.0 migration blockers with fix snippets</li>
+          <li><span class="pi">🗺️</span> A18 Reverse Engineering — full architecture from bytecode</li>
+        </ul>
+        <div class="pillar-cmd">
+          <span class="prompt">$</span> springinsight run ./my-spring-app
+        </div>
+      </div>
+
+      <!-- Pillar 2 -->
+      <div class="pillar-card pillar-card-2">
+        <div class="pillar-num pillar-num-2">Pillar 02</div>
+        <div class="pillar-icon">🔮</div>
+        <div class="pillar-title">CodeSearch</div>
+        <div class="pillar-sub">Ask plain-English questions about your codebase. RAG-powered semantic search builds a vector index of your Java code and returns precise, AI-synthesised answers with source citations.</div>
+        <ul class="pillar-features">
+          <li><span class="pi">🧠</span> Semantic vector search over every class, method, endpoint</li>
+          <li><span class="pi">🕸️</span> Code graph expansion — finds upstream and downstream context</li>
+          <li><span class="pi">📍</span> Source citations with exact file and line numbers</li>
+          <li><span class="pi">💬</span> Claude Sonnet synthesis — not just keyword matches</li>
+          <li><span class="pi">⚡</span> Runs locally via ChromaDB · no cloud required</li>
+        </ul>
+        <div class="pillar-cmd">
+          <span class="prompt">$</span> springinsight search ask "how does auth work?"
+        </div>
+      </div>
+
+      <!-- Pillar 3 -->
+      <div class="pillar-card pillar-card-3">
+        <div class="pillar-num pillar-num-3">Pillar 03</div>
+        <div class="pillar-icon">🤝</div>
+        <div class="pillar-title">SpringTeam</div>
+        <div class="pillar-sub">Delegate tasks to a team of 6 specialist AI agents. Describe what you want — a Planner decomposes it into sub-tasks and routes each one to the right expert automatically.</div>
+        <ul class="pillar-features">
+          <li><span class="pi">🗺️</span> Planner decomposes complex tasks into ordered sub-tasks</li>
+          <li><span class="pi">👨‍💻</span> Coder implements Spring Boot features with correct idioms</li>
+          <li><span class="pi">🧪</span> Tester writes JUnit 5 + Mockito tests automatically</li>
+          <li><span class="pi">👁️</span> Reviewer audits code before you approve merge</li>
+          <li><span class="pi">🗄️</span> DB Optimizer + Documenter round out the team</li>
+        </ul>
+        <div class="pillar-cmd">
+          <span class="prompt">$</span> springinsight team task "add JWT refresh token support"
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<hr />
+
 <!-- ── HOW IT WORKS ──────────────────────────────────────────────────────── -->
 <section class="section" id="how">
   <div class="container">
-    <div class="section-label">01 How It Works</div>
-    <h2 class="section-title">One command.<br/>17 agents. Complete picture.</h2>
-    <p class="section-sub">SpringInsight clones your repo, spins up a multi-agent pipeline, and delivers findings ranked by severity — all from a single command.</p>
+    <div class="section-label">02 How It Works</div>
+    <h2 class="section-title">One install.<br/>18 agents. Three pillars. Complete picture.</h2>
+    <p class="section-sub">SpringInsight runs on your machine. Point it at any Spring Boot project — local path or GitHub URL — and the full intelligence suite spins up automatically.</p>
 
     <div class="grid-2" style="gap:2.5rem; align-items:start">
       <div class="steps">
@@ -742,7 +943,7 @@
 <!-- ── AGENTS ─────────────────────────────────────────────────────────────── -->
 <section class="section" id="agents">
   <div class="container">
-    <div class="section-label">02 The Agents</div>
+    <div class="section-label">03 The Agents</div>
     <h2 class="section-title">Purpose-built for<br/>Spring Boot idioms</h2>
     <p class="section-sub">Every agent is powered by a SKILL.md — a curated behavioral contract that encodes Spring Boot-specific patterns, anti-patterns, and fix templates.</p>
 
@@ -836,11 +1037,12 @@
       </div>
 
       <!-- Phase 3 -->
-      <div class="agent-row" style="opacity:.75">
+      <div class="agent-row">
         <div class="phase-header">
           <span class="phase-badge phase-3">Phase 3</span>
-          <span class="phase-model">claude-opus · generation</span>
+          <span class="phase-model">claude-opus · generation &amp; reverse engineering</span>
         </div>
+        <p style="font-size:.875rem;color:var(--text-mid);margin-bottom:1rem">Opus-powered agents for architecture-level reasoning and code generation — including the new A18 Reverse Engineering agent that reconstructs full architecture from compiled bytecode.</p>
         <div class="agents-list">
           <div class="agent-item">
             <div class="agent-id">A05</div>
@@ -862,6 +1064,106 @@
             <div class="agent-name">Feature Documentation</div>
             <div class="agent-desc">Feature specs, API reference docs, developer onboarding guides, sequence diagrams.</div>
           </div>
+          <div class="agent-item" style="border:1px solid rgba(249,115,22,.35);border-radius:8px;background:rgba(249,115,22,.05);">
+            <div class="agent-id" style="background:rgba(249,115,22,.2);color:#fb923c;">A18</div>
+            <div class="agent-name">Reverse Engineering <span style="font-size:.65rem;background:rgba(249,115,22,.2);color:#fb923c;padding:1px 6px;border-radius:4px;margin-left:4px;">NEW</span></div>
+            <div class="agent-desc">Reconstructs full architecture from compiled <code>.class</code> bytecode — no source code required. Produces component diagrams, dependency graphs, Spring bean maps, and a plain-English architecture report. Run directly: <code>springinsight reverse ./my-app</code></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<hr />
+
+<!-- ── CODESEARCH ────────────────────────────────────────────────────────── -->
+<section class="section" id="codesearch">
+  <div class="container">
+    <div class="section-label">Pillar 02 — CodeSearch</div>
+    <h2 class="section-title">Ask your codebase<br/>anything. In plain English.</h2>
+    <p class="section-sub">CodeSearch indexes every Java class, method, and endpoint into a local vector database. Ask any question — get a precise answer backed by exact source citations.</p>
+
+    <div class="grid-2" style="gap:3rem;align-items:start;margin-top:2rem">
+
+      <!-- Left: chat mockup -->
+      <div class="chat-mockup">
+        <div class="chat-header">
+          <div class="chat-dot" style="background:#ef4444"></div>
+          <div class="chat-dot" style="background:#eab308;margin-left:4px"></div>
+          <div class="chat-dot" style="background:#22c55e;margin-left:4px"></div>
+          <span style="margin-left:.75rem">🔮 CodeSearch — orders-service</span>
+          <span style="margin-left:auto;font-size:.7rem;color:var(--green)">✓ indexed · 847 chunks</span>
+        </div>
+        <div class="chat-body">
+
+          <div class="chat-q">How does the authentication flow work? Where does JWT validation happen?</div>
+          <div class="chat-a">
+            JWT validation is handled in <strong style="color:var(--text)">JwtAuthenticationFilter</strong> (a <code>OncePerRequestFilter</code>) which intercepts all requests. It extracts the token from the <code>Authorization: Bearer</code> header, delegates to <strong style="color:var(--text)">JwtTokenProvider.validateToken()</strong> for signature and expiry checks, then calls <strong style="color:var(--text)">UserDetailsServiceImpl.loadUserByUsername()</strong> to build the <code>SecurityContext</code>.
+            <div style="margin-top:.6rem">
+              <span class="chat-source">📄 JwtAuthenticationFilter.java:42</span>
+              <span class="chat-source">📄 JwtTokenProvider.java:78</span>
+              <span class="chat-source">📄 SecurityConfig.java:31</span>
+            </div>
+          </div>
+
+          <div class="chat-q">Which services have N+1 query risks?</div>
+          <div class="chat-a">
+            Three services have potential N+1 patterns: <strong style="color:var(--text)">OrderService.getOrdersForUser()</strong> iterates over orders and calls <code>order.getItems()</code> inside the loop (lazy collection). <strong style="color:var(--text)">ProductService.enrichWithInventory()</strong> makes one DB call per product. Consider <code>@EntityGraph</code> or JOIN FETCH queries to resolve these.
+            <div style="margin-top:.6rem">
+              <span class="chat-source">📄 OrderService.java:94</span>
+              <span class="chat-source">📄 ProductService.java:61</span>
+              <span class="chat-source">📄 OrderRepository.java:28</span>
+            </div>
+          </div>
+
+          <div class="chat-q" style="opacity:.6">What does the EventPublisher do and who listens to OrderCreated?</div>
+
+        </div>
+      </div>
+
+      <!-- Right: feature bullets + CLI -->
+      <div>
+        <div class="feature-banner" style="background:rgba(168,85,247,.06);border:1px solid rgba(168,85,247,.2);margin-bottom:1.5rem">
+          <div class="feature-banner-icon">🧠</div>
+          <div class="feature-banner-body">
+            <h3>RAG pipeline built for Java</h3>
+            <p>Parses every <code>.java</code> file into typed chunks (CLASS, METHOD, ENDPOINT, CONFIG) using Java AST analysis. Spring-aware annotations enrich the embedding text — <code>@RestController</code> becomes "HTTP API controller", <code>@Service</code> becomes "business logic service" — so semantic queries find the right code even with mismatched naming.</p>
+          </div>
+        </div>
+
+        <div class="feature-banner" style="background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.2);margin-bottom:1.5rem">
+          <div class="feature-banner-icon">🕸️</div>
+          <div class="feature-banner-body">
+            <h3>Code graph expansion</h3>
+            <p>Vector search finds the top hits, then a Spring-aware code graph walks the <code>@Autowired</code> edges, <code>extends</code>/<code>implements</code> chains, and event listener relationships to pull in related context. Claude gets the full picture — not just the closest match.</p>
+          </div>
+        </div>
+
+        <div class="feature-banner" style="background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.2)">
+          <div class="feature-banner-icon">⚡</div>
+          <div class="feature-banner-body">
+            <h3>Local · private · fast</h3>
+            <p>Runs entirely on your machine using ChromaDB (SQLite-backed) and sentence-transformers. One-time indexing, then instant vector queries. Your source code never leaves your infrastructure.</p>
+          </div>
+        </div>
+
+        <div style="margin-top:1.75rem">
+          <pre style="font-size:.78rem"><code><span style="color:var(--green)"># Index your project once (then reindex on changes)</span>
+springinsight search index ./my-spring-app
+<span style="color:var(--text-dim)">🔍 Scanning Java files...   847 chunks
+🕸️  Building code graph...   1,204 edges
+🔮 Embedding (ChromaDB)...  ████████████ done
+✅ Index complete · 23s</span>
+
+<span style="color:var(--green)"># Ask anything about your codebase</span>
+springinsight search ask "explain my auth flow"
+springinsight search ask "where is rate limiting configured?"
+springinsight search ask "list all @Scheduled jobs"
+
+<span style="color:var(--green)"># Or use the Web UI chat interface</span>
+springinsight web --open  <span style="color:var(--text-dim)"># → CodeSearch in sidebar</span></code></pre>
         </div>
       </div>
 
@@ -874,7 +1176,7 @@
 <!-- ── INTELLIGENCE LAYERS ────────────────────────────────────────────────── -->
 <section class="section" id="layers">
   <div class="container">
-    <div class="section-label">03 Intelligence Layers</div>
+    <div class="section-label">05 Intelligence Layers</div>
     <h2 class="section-title">Four dimensions.<br/>One unified score.</h2>
     <p class="section-sub">SpringInsight doesn't just dump lint warnings. It reasons about your codebase across four interconnected intelligence dimensions.</p>
 
@@ -934,10 +1236,140 @@
 
 <hr />
 
+<!-- ── SPRINGTEAM ────────────────────────────────────────────────────────── -->
+<section class="section" id="springteam">
+  <div class="container">
+    <div class="section-label">Pillar 03 — SpringTeam</div>
+    <h2 class="section-title">Six specialist agents.<br/>One coherent team.</h2>
+    <p class="section-sub">Describe what you need — SpringTeam's Planner decomposes it into tasks, routes each to the right expert, and auto-chains Tester + Reviewer after every implementation. You review, approve, and ship.</p>
+
+    <div class="grid-2" style="gap:3rem;align-items:start;margin-top:2rem">
+
+      <!-- Left: kanban mockup -->
+      <div>
+        <div class="kanban-mockup">
+          <!-- Pending -->
+          <div>
+            <div class="kb-col-head kb-pending">Pending <span>2</span></div>
+            <div class="kb-card">
+              <div class="kb-badge" style="background:rgba(96,165,250,.15);color:#60a5fa">🧪 Tester</div>
+              <div class="kb-title">Write tests for RefreshTokenService</div>
+              <div class="kb-meta"><span style="color:var(--text-dim)">depends on task #3</span></div>
+            </div>
+            <div class="kb-card">
+              <div class="kb-badge" style="background:rgba(168,85,247,.15);color:#c084fc">📝 Documenter</div>
+              <div class="kb-title">Update API docs for new endpoints</div>
+              <div class="kb-meta"><span style="color:var(--text-dim)">P2</span></div>
+            </div>
+          </div>
+
+          <!-- In Progress -->
+          <div>
+            <div class="kb-col-head kb-progress">In Progress <span>1</span></div>
+            <div class="kb-card" style="border-color:rgba(96,165,250,.3)">
+              <div class="kb-badge" style="background:rgba(34,197,94,.15);color:#4ade80">👨‍💻 Coder</div>
+              <div class="kb-title">Implement JWT refresh token endpoint</div>
+              <div class="kb-meta"><span class="kb-pulse"></span><span style="color:#60a5fa">running · 42s</span></div>
+            </div>
+          </div>
+
+          <!-- Review -->
+          <div>
+            <div class="kb-col-head kb-review">Review <span>1</span></div>
+            <div class="kb-card" style="border-color:rgba(251,146,60,.3)">
+              <div class="kb-badge" style="background:rgba(251,146,60,.15);color:#fb923c">👁️ Reviewer</div>
+              <div class="kb-title">Review SecurityConfig changes</div>
+              <div class="kb-meta" style="gap:.6rem">
+                <button style="font-size:.65rem;background:rgba(34,197,94,.2);color:#4ade80;border:none;border-radius:4px;padding:2px 7px;cursor:pointer">✓ Approve</button>
+                <button style="font-size:.65rem;background:rgba(239,68,68,.15);color:#f87171;border:none;border-radius:4px;padding:2px 7px;cursor:pointer">✗ Reject</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Done -->
+          <div>
+            <div class="kb-col-head kb-done">Done <span>3</span></div>
+            <div class="kb-card">
+              <div class="kb-badge" style="background:rgba(168,85,247,.15);color:#c084fc">🗺️ Planner</div>
+              <div class="kb-title">Decompose JWT refresh token feature</div>
+              <div class="kb-meta"><span style="color:#34d399">✓ 5 sub-tasks created</span></div>
+            </div>
+            <div class="kb-card">
+              <div class="kb-badge" style="background:rgba(234,179,8,.15);color:#facc15">🗄️ DB Opt</div>
+              <div class="kb-title">Add token_revocations table + index</div>
+              <div class="kb-meta"><span style="color:#34d399">✓ done</span></div>
+            </div>
+          </div>
+        </div>
+
+        <p style="font-size:.78rem;color:var(--text-dim);margin-top:.75rem;text-align:center">Live Kanban board with SSE real-time updates · approve/reject before merge</p>
+      </div>
+
+      <!-- Right: agent roster + feature callouts -->
+      <div>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:.75rem;margin-bottom:1.5rem">
+          <div style="background:var(--surface);border:1px solid rgba(34,197,94,.2);border-radius:10px;padding:1rem">
+            <div style="font-size:1.3rem;margin-bottom:.4rem">🗺️</div>
+            <div style="font-weight:700;font-size:.88rem;margin-bottom:.3rem">Planner</div>
+            <div style="font-size:.78rem;color:var(--text-mid)">Decomposes your request into ordered sub-tasks. Resolves dependencies automatically.</div>
+          </div>
+          <div style="background:var(--surface);border:1px solid rgba(59,130,246,.2);border-radius:10px;padding:1rem">
+            <div style="font-size:1.3rem;margin-bottom:.4rem">👨‍💻</div>
+            <div style="font-weight:700;font-size:.88rem;margin-bottom:.3rem">Coder</div>
+            <div style="font-size:.78rem;color:var(--text-mid)">Implements Spring Boot features with correct idioms. Knows @Transactional, bean scoping, JPA.</div>
+          </div>
+          <div style="background:var(--surface);border:1px solid rgba(168,85,247,.2);border-radius:10px;padding:1rem">
+            <div style="font-size:1.3rem;margin-bottom:.4rem">🧪</div>
+            <div style="font-weight:700;font-size:.88rem;margin-bottom:.3rem">Tester</div>
+            <div style="font-size:.78rem;color:var(--text-mid)">Auto-triggered after Coder. Writes JUnit 5 + Mockito tests for critical paths.</div>
+          </div>
+          <div style="background:var(--surface);border:1px solid rgba(251,146,60,.2);border-radius:10px;padding:1rem">
+            <div style="font-size:1.3rem;margin-bottom:.4rem">👁️</div>
+            <div style="font-weight:700;font-size:.88rem;margin-bottom:.3rem">Reviewer</div>
+            <div style="font-size:.78rem;color:var(--text-mid)">Reviews every implementation before you see it. Catches security gaps and Spring anti-patterns.</div>
+          </div>
+          <div style="background:var(--surface);border:1px solid rgba(234,179,8,.2);border-radius:10px;padding:1rem">
+            <div style="font-size:1.3rem;margin-bottom:.4rem">🗄️</div>
+            <div style="font-weight:700;font-size:.88rem;margin-bottom:.3rem">DB Optimizer</div>
+            <div style="font-size:.78rem;color:var(--text-mid)">Schema design, index strategy, Flyway migrations, query optimization for your data model.</div>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem">
+            <div style="font-size:1.3rem;margin-bottom:.4rem">📝</div>
+            <div style="font-weight:700;font-size:.88rem;margin-bottom:.3rem">Documenter</div>
+            <div style="font-size:.78rem;color:var(--text-mid)">Generates API docs, READMEs, and onboarding guides after features land. Fast Haiku model.</div>
+          </div>
+        </div>
+
+        <pre style="font-size:.78rem"><code><span style="color:var(--green)"># Submit any task — Planner decomposes automatically</span>
+springinsight team task \
+  "add JWT refresh token with 7-day expiry and revocation"
+
+<span style="color:var(--text-dim)"># → Planner creates 5 sub-tasks automatically:
+#   [planner]   Decompose refresh token feature
+#   [db_optim]  Add token_revocations table
+#   [coder]     Implement RefreshTokenService
+#   [tester]    Write JUnit tests             (auto-triggered)
+#   [reviewer]  Review all changes            (auto-triggered)
+#   [documenter] Update API docs</span>
+
+<span style="color:var(--green)"># Monitor live progress</span>
+springinsight team status
+springinsight web --open  <span style="color:var(--text-dim)"># → SpringTeam Kanban board</span>
+
+<span style="color:var(--green)"># Approve reviewed tasks before merge</span>
+springinsight team approve &lt;task-id&gt;</code></pre>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<hr />
+
 <!-- ── USE CASES ──────────────────────────────────────────────────────────── -->
 <section class="section">
   <div class="container">
-    <div class="section-label">04 Use Cases</div>
+    <div class="section-label">06 Use Cases</div>
     <h2 class="section-title">Built for every<br/>team workflow</h2>
     <div class="grid-3">
       <div class="card">
@@ -947,28 +1379,28 @@
       </div>
       <div class="card">
         <div class="usecase-icon">🏗️</div>
-        <div class="usecase-title">Legacy Codebase Audit</div>
-        <div class="usecase-desc">Onboard to an unfamiliar Spring Boot service in minutes. Get the full dependency graph, hot-spot map, and a prioritised list of debt to tackle first.</div>
+        <div class="usecase-title">Onboard to Any Codebase</div>
+        <div class="usecase-desc">Ask CodeSearch "explain the auth flow", "what does OrderService do?" — understand a new Spring Boot service in minutes, not days. No source reading required.</div>
       </div>
       <div class="card">
         <div class="usecase-icon">⚡</div>
         <div class="usecase-title">Performance Triage</div>
-        <div class="usecase-desc">P99 latency spiking? Run the Performance + Database agents before reaching for a profiler. Find N+1 queries and cache gaps in seconds.</div>
+        <div class="usecase-desc">P99 latency spiking? Run the Performance + Database agents, then ask CodeSearch "which services call findAll() without pagination?" to pinpoint the issue fast.</div>
       </div>
       <div class="card">
-        <div class="usecase-icon">🎓</div>
-        <div class="usecase-title">Developer Education</div>
-        <div class="usecase-desc">Junior devs get actionable findings with explanations and fix code snippets — not just "bad practice detected." Learn Spring Boot best practices in context.</div>
+        <div class="usecase-icon">🤝</div>
+        <div class="usecase-title">Delegated Feature Work</div>
+        <div class="usecase-desc">Describe a feature to SpringTeam. Planner decomposes it, Coder implements it, Tester writes tests, Reviewer audits it. You approve and ship. No back-and-forth.</div>
       </div>
       <div class="card">
         <div class="usecase-icon">🚀</div>
         <div class="usecase-title">Pre-Production Checklist</div>
-        <div class="usecase-desc">Run the full 17-agent scan before releasing. Catch the DDL-auto=create in prod, actuator endpoints exposed, and JWT validation gaps before your users do.</div>
+        <div class="usecase-desc">Run the full 18-agent scan before releasing. Catch DDL-auto=create in prod, actuator endpoints exposed, JWT validation gaps, and NFR violations before your users do.</div>
       </div>
       <div class="card">
-        <div class="usecase-icon">📊</div>
-        <div class="usecase-title">Architecture Health Score</div>
-        <div class="usecase-desc">Track code quality over time. Every scan produces a score per dimension (0–100). Watch Security, Performance, and Quality scores trend over your releases.</div>
+        <div class="usecase-icon">🗺️</div>
+        <div class="usecase-title">Reverse-Engineer Closed Source</div>
+        <div class="usecase-desc">No source code? Run A18 Reverse Engineering on any compiled Spring Boot JAR. Get component diagrams, Spring bean maps, and an architecture report — from bytecode alone.</div>
       </div>
     </div>
   </div>
@@ -979,7 +1411,7 @@
 <!-- ── COMPARE ────────────────────────────────────────────────────────────── -->
 <section class="section" id="compare">
   <div class="container">
-    <div class="section-label">05 How We Compare</div>
+    <div class="section-label">07 How We Compare</div>
     <h2 class="section-title">Designed for Spring.<br/>Not generic Java linters.</h2>
     <p class="section-sub">General-purpose static analysis tools don't understand Spring's proxy model, transaction boundaries, or JPA fetch strategies. SpringInsight does.</p>
 
@@ -1087,7 +1519,7 @@
 <!-- ── INTERFACES ─────────────────────────────────────────────────────────── -->
 <section class="section">
   <div class="container">
-    <div class="section-label">06 Interfaces</div>
+    <div class="section-label">07 Interfaces</div>
     <h2 class="section-title">Use it how<br/>you work.</h2>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1.5rem;margin-bottom:1.5rem">
 
@@ -1231,7 +1663,7 @@ springinsight github scan-pr https://github.com/org/repo/pull/42</code></pre>
 <!-- ── GET ACCESS ─────────────────────────────────────────────────────────── -->
 <section class="section" id="access">
   <div class="container">
-    <div class="section-label">07 Get Access</div>
+    <div class="section-label">08 Get Access</div>
     <h2 class="section-title">Free. Open. Yours.</h2>
     <p class="section-sub">SpringInsight is MIT licensed. Your code never leaves your machine unless you choose to scan a GitHub URL.</p>
 
@@ -1243,7 +1675,9 @@ springinsight github scan-pr https://github.com/org/repo/pull/42</code></pre>
         <div class="price-cost">Free <span>forever</span></div>
         <div class="price-desc">Full feature set. Runs on your machine. Code never leaves your infrastructure.</div>
         <ul class="price-features">
-          <li>All 17 agents across 4 phases</li>
+          <li>All 18 agents across 4 phases (including A18 Reverse Engineering)</li>
+          <li>CodeSearch — RAG semantic search over your entire codebase</li>
+          <li>SpringTeam — 6 specialist agents for delegated task execution</li>
           <li>CLI + Web UI + MCP Server + VS Code extension</li>
           <li>Agent enable/disable, budget cap, pre-scan cost estimate</li>
           <li>Smart file scoping + incremental scanning (80–90% token savings on re-scans)</li>
@@ -1251,7 +1685,6 @@ springinsight github scan-pr https://github.com/org/repo/pull/42</code></pre>
           <li>PDF export of full scan reports</li>
           <li>GitHub PR auto-scanning + PR comments</li>
           <li>SQLite persistent history — shared across all tools</li>
-          <li>GitHub URL + local path support</li>
           <li>MIT license — use in commercial projects</li>
         </ul>
         <div style="margin-top:1.5rem">
@@ -1345,8 +1778,8 @@ springinsight findings --format json</code></pre>
 <section class="section">
   <div class="container">
     <div class="cta-banner">
-      <h2>Your Spring Boot app has bugs<br/>you haven't found yet.</h2>
-      <p>17 agents will. In under 60 seconds. For free.</p>
+      <h2>Review · Search · Build.<br/>All three. One tool.</h2>
+      <p>18 agents catch bugs. CodeSearch answers any question. SpringTeam builds features. Free &amp; open-source.</p>
       <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">
         <a class="btn-primary" href="#access">pip install springinsight</a>
         <a class="btn-secondary" href="https://github.com/shivpathakvw/springinsight" target="_blank">★ Star on GitHub</a>
