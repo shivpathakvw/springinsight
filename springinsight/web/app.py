@@ -834,10 +834,12 @@ async def api_search_index(request: Request):
         from ..utils.github import resolve_project_path as _resolve
 
         try:
-            # Resolve repo (clone if git URL, resolve if local path)
-            project_path = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: _resolve(repo_url, str(data_dir / "repos"))
+            # Resolve repo (clone if git URL, resolve if local path).
+            # _resolve returns (Path, source_type, source_url) — unpack the path only.
+            _resolved = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: _resolve(repo_url, data_dir)
             )
+            project_path = str(_resolved[0])
         except Exception as e:
             yield f"data: {_json.dumps({'type':'error','data':{'message':str(e)}})}\n\n"
             return
