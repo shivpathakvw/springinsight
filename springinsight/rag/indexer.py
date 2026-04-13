@@ -133,6 +133,16 @@ class Indexer:
             yield IndexProgress("error", "Scan failed", error=str(e))
             return
 
+        # Safety-net dedup: overloaded methods or regex edge-cases can still
+        # produce duplicate chunk_ids.  Keep the first occurrence of each ID.
+        seen_ids: set = set()
+        deduped: List[CodeChunk] = []
+        for c in chunks:
+            if c.chunk_id not in seen_ids:
+                seen_ids.add(c.chunk_id)
+                deduped.append(c)
+        chunks = deduped
+
         total_chunks = len(chunks)
         total_files = len(file_set)
 

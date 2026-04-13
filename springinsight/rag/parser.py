@@ -111,8 +111,9 @@ def _extract_annotations(lines: List[str], idx: int) -> List[str]:
     return list(reversed(anns))
 
 
-def _stable_id(project_path: str, fqn: str, chunk_type: str) -> str:
-    raw = f"{project_path}::{fqn}::{chunk_type}"
+def _stable_id(project_path: str, fqn: str, chunk_type: str, line: int = 0) -> str:
+    """Stable chunk ID that is unique even for overloaded methods (same name, different line)."""
+    raw = f"{project_path}::{fqn}::{chunk_type}::{line}"
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
@@ -196,7 +197,7 @@ class JavaFileParser:
         text = self._class_text(class_name, fqn, annotations, extends_str, impls_str, package, raw_snippet)
 
         chunks.append(CodeChunk(
-            chunk_id=_stable_id(str(self.project_path), fqn, "class"),
+            chunk_id=_stable_id(str(self.project_path), fqn, "class", line),
             project_path=str(self.project_path),
             chunk_type="class",
             fqn=fqn,
@@ -243,7 +244,7 @@ class JavaFileParser:
         text = self._method_text(method.name, method_fqn, m_anns, class_name, params, raw_snippet)
 
         chunk = CodeChunk(
-            chunk_id=_stable_id(str(self.project_path), method_fqn, "method"),
+            chunk_id=_stable_id(str(self.project_path), method_fqn, "method", line),
             project_path=str(self.project_path),
             chunk_type="method",
             fqn=method_fqn,
@@ -287,7 +288,7 @@ class JavaFileParser:
                 f"CODE:\n{raw_snippet[:600]}"
             )
             chunks.append(CodeChunk(
-                chunk_id=_stable_id(str(self.project_path), endpoint_fqn, "endpoint"),
+                chunk_id=_stable_id(str(self.project_path), endpoint_fqn, "endpoint", line),
                 project_path=str(self.project_path),
                 chunk_type="endpoint",
                 fqn=endpoint_fqn,
@@ -325,7 +326,7 @@ class JavaFileParser:
                 text += f"DEPENDENCY: {class_name} depends on {type_name}\n"
 
             chunks.append(CodeChunk(
-                chunk_id=_stable_id(str(self.project_path), field_fqn, "field"),
+                chunk_id=_stable_id(str(self.project_path), field_fqn, "field", line),
                 project_path=str(self.project_path),
                 chunk_type="field",
                 fqn=field_fqn,
@@ -370,7 +371,7 @@ class JavaFileParser:
                 raw = self._extract_lines(i, min(i + 15, len(self.lines)))
                 text = self._class_text(class_name, fqn, ann_block, cm.group(3) or "", cm.group(4) or "", package, raw)
                 chunks.append(CodeChunk(
-                    chunk_id=_stable_id(str(self.project_path), fqn, "class"),
+                    chunk_id=_stable_id(str(self.project_path), fqn, "class", i + 1),
                     project_path=str(self.project_path),
                     chunk_type="class",
                     fqn=fqn,
@@ -395,7 +396,7 @@ class JavaFileParser:
                 raw = self._extract_lines(i, min(i + 25, len(self.lines)))
                 text = self._method_text(method_name, method_fqn, m_anns, current_class.split(".")[-1], params, raw)
                 chunks.append(CodeChunk(
-                    chunk_id=_stable_id(str(self.project_path), method_fqn, "method"),
+                    chunk_id=_stable_id(str(self.project_path), method_fqn, "method", i + 1),
                     project_path=str(self.project_path),
                     chunk_type="method",
                     fqn=method_fqn,
