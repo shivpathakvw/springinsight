@@ -107,10 +107,27 @@
           </span>
         </div>
 
-        <!-- Row 3: elapsed time for running agents -->
-        <div x-show="status === 'running'" style="font-size:11px; color:var(--muted);">
-          <span x-text="agentElapsed(agentId)"></span>
+        <!-- Row 3: elapsed time + stop button for running agents -->
+        <div x-show="status === 'running'" style="display:flex; align-items:center; justify-content:space-between;">
+          <span style="font-size:11px; color:var(--muted);" x-text="agentElapsed(agentId)"></span>
+          <button
+            @click.stop="stopAgent(agentId)"
+            :disabled="stoppingAgent === agentId"
+            style="font-size:10px; padding:2px 8px; border-radius:4px; border:1px solid rgba(239,68,68,.5);
+                   background:rgba(239,68,68,.08); color:#f87171; cursor:pointer; display:flex; align-items:center; gap:4px;
+                   transition:background .15s;"
+            onmouseover="this.style.background='rgba(239,68,68,.18)'"
+            onmouseout="this.style.background='rgba(239,68,68,.08)'"
+          >
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+            <span x-text="stoppingAgent === agentId ? 'Stopping…' : 'Stop'"></span>
+          </button>
         </div>
+
+        <!-- Row 3b: failure reason -->
+        <div x-show="status === 'failed' && state.agent_errors && state.agent_errors[agentId]"
+             style="margin-top:5px; font-size:11px; color:#f87171; font-family:monospace; white-space:pre-wrap; line-height:1.4; border-left:2px solid #f87171; padding-left:6px;"
+             x-text="state.agent_errors && state.agent_errors[agentId]"></div>
 
         <!-- Row 4: last log line preview -->
         <div x-show="state.agent_logs && state.agent_logs[agentId] && state.agent_logs[agentId].length > 0"
@@ -257,6 +274,7 @@ function liveScan() {
     eventLog: [],
     showAgentLogs: false,
     expandedAgent: null,
+    stoppingAgent: null,   // agent_id being stopped, for button feedback
     agentStartEpoch: {},   // agent_id -> epoch ms
     startTime: Date.now(),
     elapsedSecs: 0,
@@ -343,6 +361,11 @@ function liveScan() {
         // Refresh cost estimate with actual file counts now that scan is done
         this._fetchCostEstimate();
 
+      } else if (evt.type === 'agent_error') {
+        // Store per-agent error reason so we can display it on failed cards
+        if (!this.state.agent_errors) this.state.agent_errors = {};
+        this.state.agent_errors[evt.agent_id] = evt.error;
+
       } else if (evt.type === 'scan_failed') {
         this.state.status = 'failed';
         this.state.error = evt.error;
@@ -353,6 +376,18 @@ function liveScan() {
 
     toggleAgent(agentId) {
       this.expandedAgent = this.expandedAgent === agentId ? null : agentId;
+    },
+
+    async stopAgent(agentId) {
+      if (this.stoppingAgent === agentId) return;
+      this.stoppingAgent = agentId;
+      try {
+        await fetch(`/api/runs/${RUN_ID}/agents/${agentId}/stop`, { method: 'POST' });
+      } catch (e) {
+        console.error('Stop agent failed:', e);
+      } finally {
+        this.stoppingAgent = null;
+      }
     },
 
     clearLog() { this.eventLog = []; },
@@ -433,6 +468,7 @@ function liveScan() {
     formatEvent(evt) {
       if (evt.type === 'scan_started')    return `Scan started — ${evt.agent_count} agent(s), ${evt.total_java_files || '?'} Java files`;
       if (evt.type === 'agent_update')    return `[${evt.agent_id}] ${evt.agent_name || evt.agent_id}: ${evt.status}`;
+      if (evt.type === 'agent_error')    return `[${evt.agent_id}] ⚠ ${evt.error}`;
       if (evt.type === 'agent_log')       return `[${evt.agent_id}] ${evt.message}`;
       if (evt.type === 'findings_update') return `[${evt.agent_id}] ${evt.count} finding(s) — total: ${evt.total}`;
       if (evt.type === 'run_complete')    return `✓ Scan complete — ${evt.findings_count} finding(s)`;

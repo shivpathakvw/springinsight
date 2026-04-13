@@ -321,7 +321,7 @@
             {% elif score %}{% set sc = 'var(--red)' %}
             {% else %}{% set sc = 'var(--muted)' %}{% endif %}
           {% endif %}
-          <tr>
+          <tr x-show="!deletedRuns.has('{{ run.id }}')" style="transition:opacity .2s;">
             <td>
               <div style="display:flex; align-items:center; gap:8px;">
                 <div class="dot dot-{{ run.status }}"></div>
@@ -357,10 +357,24 @@
             <td style="color:var(--muted); font-size:12px;">
               {{ run.started_at.strftime('%b %d, %H:%M') if run.started_at else '?' }}
             </td>
-            <td>
-              <a href="/scans/{{ run.id }}/report" style="color:var(--orange); font-size:12px; font-weight:500; white-space:nowrap;">
+            <td style="display:flex; align-items:center; gap:10px; white-space:nowrap;">
+              <a href="/scans/{{ run.id }}/report" style="color:var(--orange); font-size:12px; font-weight:500;">
                 View →
               </a>
+              <button
+                @click="deleteRun('{{ run.id }}')"
+                :disabled="deletingRun === '{{ run.id }}'"
+                title="Delete this scan"
+                style="background:none; border:none; cursor:pointer; padding:2px 4px; border-radius:4px;
+                       color:var(--muted); opacity:.6; transition:all .15s; line-height:1;"
+                onmouseover="this.style.color='#f87171'; this.style.opacity='1'"
+                onmouseout="this.style.color='var(--muted)'; this.style.opacity='.6'"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                  <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/>
+                </svg>
+              </button>
             </td>
           </tr>
           {% endfor %}
@@ -401,6 +415,25 @@ function dashboard() {
     hasGithubToken: true,
     // large project detection
     largeProjectInfo: null,
+    // scan deletion
+    deletedRuns: new Set(),
+    deletingRun: null,
+
+    async deleteRun(runId) {
+      if (this.deletingRun === runId) return;
+      if (!confirm('Delete this scan and all its findings? This cannot be undone.')) return;
+      this.deletingRun = runId;
+      try {
+        const res = await fetch(`/api/runs/${runId}`, { method: 'DELETE' });
+        if (res.ok) {
+          this.deletedRuns = new Set([...this.deletedRuns, runId]);
+        }
+      } catch (e) {
+        console.error('Delete failed', e);
+      } finally {
+        this.deletingRun = null;
+      }
+    },
 
     async init() {
       // Check if GitHub token is configured

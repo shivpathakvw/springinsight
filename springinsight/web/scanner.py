@@ -236,6 +236,16 @@ async def run_scan_background(
         state.agent_java_files[agent_id] = result.get("java_files", 0)
         state.agent_findings[agent_id] = len(findings)
 
+        # Emit error detail for failed agents so the UI can show WHY they failed
+        if result.get("status") == "failed" and result.get("error"):
+            state.push_event(
+                {
+                    "type": "agent_error",
+                    "agent_id": agent_id,
+                    "error": result["error"],
+                }
+            )
+
         # Emit findings-discovered event for each agent
         if findings:
             state.push_event(

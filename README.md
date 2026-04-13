@@ -121,28 +121,238 @@ springinsight/
 
 ## Installation
 
+SpringInsight requires **three things** before it will work: Python 3.10+, Node.js (for the Claude Code CLI), and an Anthropic API key. Follow every step below — skipping any one of them is the most common reason scans fail.
+
+---
+
+### Step 1 — Install Python 3.10 or higher
+
+Check your Python version:
+
 ```bash
-# CLI only
-pip install springinsight
+python3 --version
+# Must print Python 3.10.x or higher
+```
 
-# CLI + Web UI
-pip install 'springinsight[web]'
+If you don't have Python 3.10+, download it from [python.org](https://www.python.org/downloads/) or use your system package manager:
 
-# CLI + Web UI + MCP Server + PDF + GitHub
+```bash
+# macOS (with Homebrew)
+brew install python@3.12
+
+# Ubuntu / Debian
+sudo apt update && sudo apt install python3.12 python3.12-venv python3-pip
+```
+
+---
+
+### Step 2 — Create a Python virtual environment (strongly recommended)
+
+Using a virtual environment keeps SpringInsight's dependencies isolated from your system Python and avoids version conflicts.
+
+```bash
+# Create a venv named 'si-env' (you can name it anything)
+python3 -m venv si-env
+
+# Activate it — you must do this every time you open a new terminal
+# macOS / Linux:
+source si-env/bin/activate
+
+# Windows (PowerShell):
+si-env\Scripts\Activate.ps1
+```
+
+Your terminal prompt will change to show `(si-env)` when the venv is active.
+
+---
+
+### Step 3 — Install SpringInsight
+
+With the venv active, install SpringInsight:
+
+```bash
+# Web UI + all features (recommended)
 pip install 'springinsight[all]'
 
-# From source (editable)
+# CLI only (no web UI)
+pip install springinsight
+
+# CLI + Web UI (no PDF export or MCP server)
+pip install 'springinsight[web]'
+```
+
+**Installing from source** (if you cloned the repo):
+
+```bash
 git clone https://github.com/shivpathakvw/springinsight
 cd springinsight
 pip install -e '.[all]'
 ```
 
-### Configure API Key
+Verify the installation:
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-# or create a .env file in your working directory
+springinsight --version
+# Should print the version number, e.g.: SpringInsight 0.4.x
 ```
+
+---
+
+### Step 4 — Install Node.js and the Claude Code CLI
+
+SpringInsight agents run via the **Claude Code CLI** (`claude`). This is a separate tool installed via Node.js/npm.
+
+**Install Node.js first** (if you don't have it):
+
+```bash
+# Check if you already have Node.js
+node --version    # Must be v18 or higher
+npm --version
+```
+
+If not installed, download from [nodejs.org](https://nodejs.org/) (choose the LTS version). Or via package manager:
+
+```bash
+# macOS (Homebrew)
+brew install node
+
+# Ubuntu / Debian
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+sudo apt install -y nodejs
+```
+
+**Install Claude Code CLI globally via npm:**
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+Verify it installed correctly:
+
+```bash
+claude --version
+# Should print something like: Claude Code 1.x.x
+```
+
+> **⚠️ Important — venv PATH issue**: When you activate a Python venv, it can sometimes hide the npm global bin directory from your PATH. If `claude --version` works in a plain terminal but agents all fail inside the venv, add npm's bin directory to your PATH explicitly:
+>
+> ```bash
+> # Find where npm installs global packages:
+> npm root -g
+> # Example output: /Users/you/.nvm/versions/node/v20.x.x/lib/node_modules
+>
+> # Add the parent bin/ to PATH in your shell profile (~/.zshrc or ~/.bashrc):
+> export PATH="$(npm bin -g):$PATH"
+>
+> # Then reload your shell:
+> source ~/.zshrc
+> ```
+>
+> SpringInsight automatically searches common npm/nvm install locations, so this is usually handled for you.
+
+**Complete Claude Code setup** (first-time only):
+
+```bash
+# This opens a browser to authenticate with Anthropic
+claude
+```
+
+Follow the prompts to log in. Once authenticated, press Ctrl+C to exit. The CLI is now ready.
+
+---
+
+### Step 5 — Get an Anthropic API Key
+
+SpringInsight uses the Anthropic API directly (not just the Claude Code CLI). You need an API key.
+
+1. Go to [console.anthropic.com](https://console.anthropic.com/)
+2. Sign in or create an account
+3. Navigate to **API Keys** and create a new key
+4. Copy the key — it starts with `sk-ant-`
+
+Set the key as an environment variable **or** create a `.env` file:
+
+**Option A — environment variable (current terminal session only):**
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxxxxxxxxx
+```
+
+**Option B — `.env` file (persists across sessions, recommended):**
+
+Create a file named `.env` in the directory where you will run `springinsight`:
+
+```bash
+# .env
+ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxxxxxxxxx
+```
+
+> The `.env` file is loaded automatically when SpringInsight starts. Never commit it to version control — add `.env` to your `.gitignore`.
+
+---
+
+### Step 6 — Verify everything works end-to-end
+
+```bash
+# Make sure your venv is still active:
+source si-env/bin/activate
+
+# Check Python package
+springinsight --version
+
+# Check Claude Code CLI is found
+claude --version
+
+# Check API key is set
+echo $ANTHROPIC_API_KEY   # should print sk-ant-...
+
+# Run a quick Phase 1 scan (Haiku, very cheap ~$0.03)
+springinsight run https://github.com/spring-projects/spring-petclinic --agents A03,A10,A12
+```
+
+You should see agents starting and findings appearing. If all agents fail immediately, see the [Troubleshooting](#troubleshooting) section below.
+
+---
+
+### Quick-reference: install commands in one block
+
+```bash
+# 1. Create and activate venv
+python3 -m venv si-env
+source si-env/bin/activate          # macOS/Linux
+
+# 2. Install SpringInsight
+pip install 'springinsight[all]'
+
+# 3. Install Claude Code CLI
+npm install -g @anthropic-ai/claude-code
+claude                               # authenticate (first time only)
+
+# 4. Set API key
+echo 'ANTHROPIC_API_KEY=sk-ant-...' > .env
+
+# 5. Run your first scan
+springinsight run /path/to/your/spring-project
+```
+
+---
+
+### Troubleshooting
+
+**All agents fail immediately with `java_files: 0`**  
+→ The `claude` CLI is not on your PATH. Run `claude --version` in your terminal. If it works outside the venv but not inside, add the npm global bin to your PATH (see Step 4 above).
+
+**`springinsight: command not found`**  
+→ Your venv is not active. Run `source si-env/bin/activate` first.
+
+**`ModuleNotFoundError` on startup**  
+→ You installed into the wrong Python environment. Deactivate and reactivate the venv, then reinstall: `pip install 'springinsight[all]'`.
+
+**`AuthenticationError` or `401 Unauthorized`**  
+→ Your `ANTHROPIC_API_KEY` is wrong or not set. Check with `echo $ANTHROPIC_API_KEY`.
+
+**Scan starts but no findings appear**  
+→ Either all agents failed (check agent cards for error messages) or the project has no Java files in the scanned path.
 
 ---
 

@@ -25,6 +25,40 @@ from .registry import AgentMeta, resolve_skill_path
 
 logger = logging.getLogger(__name__)
 
+# Global registry of active subprocesses: run_id -> agent_id -> Process
+# Used by stop_agent() to kill a specific agent on demand.
+_active_procs: dict[str, dict[str, "asyncio.subprocess.Process"]] = {}
+
+
+def _register_proc(run_id: str, agent_id: str, proc) -> None:
+    _active_procs.setdefault(run_id, {})[agent_id] = proc
+
+
+def _unregister_proc(run_id: str, agent_id: str) -> None:
+    procs = _active_procs.get(run_id, {})
+    procs.pop(agent_id, None)
+    if not procs:
+        _active_procs.pop(run_id, None)
+
+
+async def stop_agent(run_id: str, agent_id: str) -> bool:
+    """Kill the subprocess for a specific running agent. Returns True if it was alive."""
+    proc = _active_procs.get(run_id, {}).get(agent_id)
+    if proc is None or proc.returncode is not None:
+        return False
+    try:
+        proc.terminate()
+        # Give it 2s to exit gracefully, then kill hard
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=2.0)
+        except asyncio.TimeoutError:
+            proc.kill()
+    except Exception:
+        pass
+    _unregister_proc(run_id, agent_id)
+    return True
+
+
 # Model identifiers
 MODEL_IDS = {
     "haiku": "claude-haiku-4-5-20251001",
@@ -39,9 +73,63 @@ AGENT_TOOLS = "Bash,Read,Write,Glob,Grep"
 AGENT_TIMEOUT = 600
 
 
+def _find_claude_cli() -> str | None:
+    """Find the claude CLI binary, searching PATH and common npm/nvm install locations.
+
+    Python venvs modify PATH and often drop npm's global bin directory.
+    We probe well-known locations so SpringInsight works even when `claude`
+    is not on the activated venv PATH.
+    """
+    # 1. Standard PATH lookup (fastest path — works when env is set up correctly)
+    found = shutil.which("claude")
+    if found:
+        return found
+
+    candidates: list[Path] = [
+        # npm --global prefix defaults on macOS / Linux
+        Path.home() / ".npm-global" / "bin" / "claude",
+        # npm prefix when set via 'npm config set prefix'
+        Path.home() / ".local" / "bin" / "claude",
+        # Homebrew (Apple Silicon + Intel)
+        Path("/opt/homebrew/bin/claude"),
+        Path("/usr/local/bin/claude"),
+        # System fallback
+        Path("/usr/bin/claude"),
+    ]
+
+    # nvm: walk the versions tree, try the three most-recent node installs
+    nvm_dir = Path.home() / ".nvm" / "versions" / "node"
+    if nvm_dir.exists():
+        try:
+            for v in sorted(nvm_dir.iterdir(), reverse=True)[:3]:
+                candidates.insert(0, v / "bin" / "claude")
+        except Exception:
+            pass
+
+    # volta: managed toolchain directory
+    volta_bin = Path.home() / ".volta" / "bin" / "claude"
+    candidates.insert(0, volta_bin)
+
+    # fnm / asdf node shims
+    for extra in [
+        Path.home() / ".fnm" / "aliases" / "default" / "bin" / "claude",
+        Path.home() / ".asdf" / "shims" / "claude",
+    ]:
+        candidates.insert(0, extra)
+
+    for p in candidates:
+        try:
+            if p.exists() and os.access(str(p), os.X_OK):
+                return str(p)
+        except Exception:
+            continue
+
+    return None
+
+
 def _check_claude_cli() -> bool:
-    """Verify the claude CLI is available on PATH."""
-    return shutil.which("claude") is not None
+    """Verify the claude CLI is available (legacy shim — use _find_claude_cli directly)."""
+    return _find_claude_cli() is not None
 
 
 def _build_agent_prompt(
@@ -122,11 +210,18 @@ async def run_agent_async(
         if log_callback:
             log_callback(agent.id, msg)
 
-    if not _check_claude_cli():
+    claude_bin = _find_claude_cli()
+    if not claude_bin:
+        _error = (
+            "claude CLI not found. Searched PATH and common npm/nvm locations. "
+            "Install Claude Code: npm install -g @anthropic-ai/claude-code  "
+            "then make sure it is executable in your terminal (run: claude --version)."
+        )
+        _log(f"ERROR: {_error}")
         return {
             "agent_id": agent.id,
             "status": "failed",
-            "error": "claude CLI not found on PATH. Install Claude Code: npm install -g @anthropic-ai/claude-code",
+            "error": _error,
             "started_at": started_at,
             "completed_at": datetime.utcnow(),
             "output_json": None,
@@ -136,7 +231,7 @@ async def run_agent_async(
         }
 
     java_files = _count_java_files(project_path)
-    _log(f"Found {java_files} Java source files")
+    _log(f"Found {java_files} Java source files | claude binary: {claude_bin}")
 
     # ── Compute file scope (agent-specific filtering + incremental cache) ──
     file_scope_block = ""
@@ -161,21 +256,21 @@ async def run_agent_async(
             logger.warning("[%s] Scope computation failed: %s", agent.id, exc)
             file_scope_block = ""
 
-    prompt = _build_agent_prompt(
-        agent=agent,
-        ctx=ctx,
-        project_path=project_path,
-        output_json_path=output_json,
-        output_md_path=output_md,
-        run_id=run_id,
-        extra_scope=extra_scope,
-        file_scope_block=file_scope_block,
-        batch_scope_block=batch_scope_block,
-    )
-
     try:
+        prompt = _build_agent_prompt(
+            agent=agent,
+            ctx=ctx,
+            project_path=project_path,
+            output_json_path=output_json,
+            output_md_path=output_md,
+            run_id=run_id,
+            extra_scope=extra_scope,
+            file_scope_block=file_scope_block,
+            batch_scope_block=batch_scope_block,
+        )
+
         process = await asyncio.create_subprocess_exec(
-            "claude",
+            claude_bin,          # resolved path — works inside venvs
             "--model", agent.model,
             "--allowedTools", AGENT_TOOLS,
             "--print",
@@ -184,6 +279,7 @@ async def run_agent_async(
             stderr=asyncio.subprocess.PIPE,
             cwd=project_path,
         )
+        _register_proc(run_id, agent.id, process)
 
         # Heartbeat task — emits progress every 15s while the agent is running
         heartbeat_interval = 15
@@ -224,6 +320,7 @@ async def run_agent_async(
                 await heartbeat_task
             except asyncio.CancelledError:
                 pass
+            _unregister_proc(run_id, agent.id)
 
         completed_at = datetime.utcnow()
         duration = (completed_at - started_at).total_seconds()
@@ -304,7 +401,7 @@ async def run_agent_async(
             "output_json": None,
             "output_md": None,
             "findings": [],
-            "java_files": java_files if "java_files" in dir() else 0,
+            "java_files": java_files,   # always assigned before the try block
         }
 
 

@@ -695,6 +695,51 @@ async def api_get_run(run_id: str, request: Request):
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@app.post("/api/runs/{run_id}/agents/{agent_id}/stop")
+async def api_stop_agent(run_id: str, agent_id: str):
+    """Stop a specific running agent mid-scan (kills its subprocess)."""
+    from ..agents.runner import stop_agent
+    ok = await stop_agent(run_id, agent_id)
+    # Also broadcast a status update so the UI reacts immediately
+    state = _active_scans.get(run_id)
+    if state and ok:
+        state.agents[agent_id] = "failed"
+        state.agent_end_times[agent_id] = datetime.utcnow().isoformat()
+        state.push_event({
+            "type": "agent_update",
+            "agent_id": agent_id,
+            "agent_name": state.agent_names.get(agent_id, agent_id),
+            "status": "failed",
+            "java_files": state.agent_java_files.get(agent_id, 0),
+            "started_at": state.agent_start_times.get(agent_id),
+        })
+        state.push_event({
+            "type": "agent_error",
+            "agent_id": agent_id,
+            "error": "Stopped by user",
+        })
+    return JSONResponse({"ok": ok})
+
+
+@app.delete("/api/runs/{run_id}")
+async def api_delete_run(run_id: str):
+    """Hard-delete a scan run — removes from active scans and DB."""
+    from ..db.store import Run, Finding
+    # Remove from active scans (cancels SSE stream on next tick)
+    _active_scans.pop(run_id, None)
+    _active_batch_scans.pop(run_id, None)
+    deleted = False
+    try:
+        with get_db() as db:
+            db.query(Finding).filter(Finding.run_id == run_id).delete()
+            db.query(Run).filter(Run.id == run_id).delete()
+            db.commit()
+            deleted = True
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Delete run %s failed: %s", run_id, exc)
+    return JSONResponse({"ok": deleted})
+
+
 @app.get("/api/runs/{run_id}/findings")
 async def api_get_findings(
     run_id: str,
