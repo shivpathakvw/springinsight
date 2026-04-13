@@ -1,9 +1,13 @@
 # 🍃 SpringInsight
 
 > **Autonomous multi-agent codebase intelligence for Java & Spring Boot.**  
-> 17 AI agents. 4 interfaces. Find what code reviews miss.
+> 18 AI agents. 3 pillars. 4 interfaces. Find what code reviews miss.
 
-SpringInsight runs a fleet of AI agents over your Spring Boot project — simultaneously scanning for CVEs, dead code, security misconfigurations, N+1 queries, race conditions, API design violations, and more — then delivers actionable, prioritised findings with exact fix recommendations.
+SpringInsight is a three-pillar intelligence suite for Spring Boot teams:
+
+- **Pillar 1 — Code Review**: 18 AI agents scan your codebase in parallel for CVEs, dead code, security misconfigurations, N+1 queries, race conditions, API design violations, and more — delivering prioritised, actionable findings.
+- **Pillar 2 — CodeSearch**: Semantic RAG search over your codebase. Ask natural-language questions, get cited answers grounded in your actual code.
+- **Pillar 3 — SpringTeam**: Delegate features to an autonomous AI development team. Agents write code, generate tests, update docs, and submit tasks for your review.
 
 [![PyPI version](https://img.shields.io/pypi/v/springinsight?style=flat-square&color=22c55e)](https://pypi.org/project/springinsight/)
 [![PyPI downloads](https://img.shields.io/pypi/dm/springinsight?style=flat-square&color=22c55e)](https://pypi.org/project/springinsight/)
@@ -15,16 +19,43 @@ SpringInsight runs a fleet of AI agents over your Spring Boot project — simult
 
 ---
 
+## Three Pillars
+
+| | Pillar 1 — Code Review | Pillar 2 — CodeSearch | Pillar 3 — SpringTeam |
+|---|---|---|---|
+| **What it does** | 18 agents scan your codebase in parallel | Natural-language RAG search over your code | Delegate features to an autonomous AI dev team |
+| **Core command** | `springinsight run <project>` | `springinsight search ask "<question>"` | `springinsight team task "<description>"` |
+| **Model** | Haiku + Sonnet + Opus | MiniLM-L6-v2 + Claude Sonnet | Claude Sonnet |
+| **Storage** | SQLite findings DB | ChromaDB vector store + SQLite code graph | SQLite task queue |
+| **Web UI** | `/` (scan dashboard) | `/search` | `/tasks` |
+
+---
+
 ## Why SpringInsight?
 
-Modern Spring Boot projects accumulate technical debt faster than manual reviews can keep up. SpringInsight brings **automated expert-level analysis** that runs in minutes:
+Modern Spring Boot projects accumulate technical debt faster than manual reviews can keep up. SpringInsight brings **automated expert-level analysis** across three pillars:
 
+**Pillar 1 — Code Review**
 - 🔐 **Security** — CVEs in dependencies, auth bypass risks, hardcoded secrets, actuator exposure
 - 🏗️ **Architecture** — SOLID violations, circular dependencies, layering antipatterns
 - 🗑️ **Dead Code** — Spring-aware unused class/method detection (never false-positives on `@Bean` or `@EventListener`)
 - ⚙️ **Config Review** — DDL-auto dangers, debug mode in production, Docker/CI/CD misconfigs
-- 🚀 **NFR Optimizer** *(new)* — concurrency, caching, HikariCP tuning, virtual threads, GC, startup time
-- ⬆️ **Upgrade Advisor** *(new)* — detects deprecated APIs for Spring Boot 3.5 / 4.0, step-by-step migration plan
+- 🚀 **NFR Optimizer** — concurrency, caching, HikariCP tuning, virtual threads, GC, startup time
+- ⬆️ **Upgrade Advisor** — detects deprecated APIs for Spring Boot 3.5 / 4.0, step-by-step migration plan
+- 🔄 **Reverse Engineering** *(new)* — reconstructs architecture and docs from any codebase, including closed-source
+
+**Pillar 2 — CodeSearch**
+- 🔍 **Semantic Search** — ask "which service handles retries?" and get a cited answer from your actual code
+- 🕸️ **Code Graph** — AST-based graph of classes, methods, endpoints, fields with cross-reference edges
+- 🔒 **100% Local** — all-MiniLM-L6-v2 model + ChromaDB run on your machine; code never leaves your environment
+- ⚡ **Fast** — 12ms embed + 8ms vector search on a 300-chunk project
+
+**Pillar 3 — SpringTeam**
+- 🤖 **Delegated Development** — describe a feature in plain English; agents write code, tests, and docs
+- 👁️ **Human-in-the-loop** — every task goes through a review step before you accept the changes
+- 🔁 **Retry with feedback** — reject tasks with a note; the agent revises and re-submits
+
+**Platform**
 - 📋 **Project Context** — inject custom rules into every agent ("no field injection", "all endpoints need @PreAuthorize")
 - 🔍 **GitHub PR Scanning** — scans only changed files (focused, fast), auto-posts findings as PR comments
 - 📦 **Large Project Support** — auto-detects >1k file projects, splits into intelligent batches (maven/gradle/package)
@@ -40,33 +71,50 @@ springinsight/
 │   ├── context.yaml               ← per-project descriptor
 │   └── ~/.springinsight/
 │       ├── springinsight.db       ← global SQLite (CLI + Web share)
+│       ├── chroma/                ← ChromaDB vector store (CodeSearch)
+│       ├── repos/                 ← auto-cloned GitHub repos
 │       ├── global-context.yaml    ← global custom rules
 │       ├── agent_config.json      ← enabled/disabled agents
 │       ├── github.json            ← GitHub token + watched repos
 │       └── pr-scans.json          ← PR scan history
 │
-├── Phase 1  (claude-haiku)    — fast pattern matching (~$0.05)
-│   ├── A03  CVE & License Scanner
-│   ├── A10  Dead Code Detector
-│   └── A12  Config & Infra Review
+├── Pillar 1: Code Review (springinsight run)
+│   ├── Phase 1  (claude-haiku)    — fast pattern matching (~$0.05)
+│   │   ├── A03  CVE & License Scanner
+│   │   ├── A10  Dead Code Detector
+│   │   └── A12  Config & Infra Review
+│   │
+│   ├── Phase 2  (claude-sonnet)   — deep analysis (~$0.80)
+│   │   ├── A01  Deep Code Review
+│   │   ├── A02  Security Scanner (OWASP Top 10)
+│   │   ├── A04  Database & JPA Review
+│   │   ├── A09  PR Review
+│   │   ├── A11  Performance Analyzer
+│   │   ├── A13  API Design Auditor
+│   │   ├── A14  Concurrency & Transaction Audit
+│   │   ├── A15  Dependency Graph
+│   │   ├── A16  Spring Boot Upgrade Advisor
+│   │   └── A17  NFR Optimizer
+│   │
+│   └── Phase 3/4 (claude-opus/sonnet) — synthesis & generation (~$2+)
+│       ├── A05  Architecture Review
+│       ├── A06  Test Generator
+│       ├── A07  Feature Documentation
+│       ├── A08  LLD Generator
+│       └── A18  Reverse Engineering  ← NEW
 │
-├── Phase 2  (claude-sonnet)   — deep analysis (~$0.80)
-│   ├── A01  Deep Code Review
-│   ├── A02  Security Scanner (OWASP Top 10)
-│   ├── A04  Database & JPA Review
-│   ├── A09  PR Review
-│   ├── A11  Performance Analyzer
-│   ├── A13  API Design Auditor
-│   ├── A14  Concurrency & Transaction Audit
-│   ├── A15  Dependency Graph
-│   ├── A16  Spring Boot Upgrade Advisor  ← NEW
-│   └── A17  NFR Optimizer                ← NEW
+├── Pillar 2: CodeSearch (springinsight search)
+│   ├── Parser      — Java AST → typed code chunks
+│   ├── CodeGraph   — SQLite graph of nodes + edges
+│   ├── Embedder    — sentence-transformers all-MiniLM-L6-v2 (384-dim)
+│   ├── ChromaDB    — cosine-similarity vector store
+│   └── Searcher    — query embed → vector search → graph expansion → Claude
 │
-└── Phase 3/4 (claude-opus/sonnet) — synthesis & generation (~$2+)
-    ├── A05  Architecture Review
-    ├── A06  Test Generator
-    ├── A07  Feature Documentation
-    └── A08  LLD Generator
+└── Pillar 3: SpringTeam (springinsight team)
+    ├── Task queue  — SQLite-backed task state machine
+    ├── Agents      — Feature Writer, Test Writer, Doc Writer,
+    │                 Refactor Agent, Security Fixer, Code Reviewer
+    └── Approval    — human-in-the-loop approve/reject workflow
 ```
 
 ---
@@ -184,6 +232,194 @@ Then open `http://localhost:8765`, paste a GitHub URL or local path, and click *
 - **Settings → GitHub PR** — connect GitHub and watch repositories for PR scanning
 - **Export PDF** button on every completed scan result page
 - Shared SQLite database with CLI
+
+---
+
+## Pillar 2 — CodeSearch
+
+Semantic natural-language search over your indexed Spring Boot codebase, powered by a local embedding model (all-MiniLM-L6-v2) + ChromaDB + Claude Sonnet. Everything runs on your machine — code never leaves your environment.
+
+### How it works
+
+1. **Index** — scans Java source files, builds a code graph (nodes + edges), embeds each chunk with MiniLM, stores in ChromaDB.
+2. **Ask** — embeds your question, runs cosine-similarity search, expands results via the code graph, sends context to Claude for a cited answer.
+
+### CodeSearch CLI
+
+```bash
+# Index a local project
+springinsight search index ./my-spring-app
+
+# Index a GitHub repo (clones automatically to ~/.springinsight/repos/)
+springinsight search index https://github.com/spring-projects/spring-petclinic
+
+# Force a full re-index (even if already indexed)
+springinsight search index ./my-spring-app --force
+
+# Verbose indexing — shows per-phase timing, chunk-type breakdown, batch sizes
+springinsight search index ./my-spring-app --verbose
+
+# Ask a natural-language question (uses current directory as project)
+springinsight search ask "which classes handle payment retry?"
+springinsight search ask "how is JWT validation implemented?"
+springinsight search ask "list all @Scheduled jobs"
+
+# Ask against a specific project
+springinsight search ask "explain the auth flow" --project ./my-spring-app
+springinsight search ask "find all @Transactional methods" -p https://github.com/org/repo
+
+# Verbose ask — shows collection size, embed/vector timing, all results with scores,
+# context window usage, per-source snippets, and wall-time breakdown
+springinsight search ask "which service handles orders?" --verbose
+
+# Retrieve more vector results (default: 10)
+springinsight search ask "find all REST endpoints" --top-k 20
+
+# Show index statistics for a project
+springinsight search status
+springinsight search status --project ./my-spring-app
+
+# Full status with chunk-type breakdown, DB/Chroma paths
+springinsight search status --project ./my-spring-app --verbose
+```
+
+### `--verbose` output (index)
+
+```
+  🔍 Scanning Java source files…
+  🔍 Found 48 files → 312 chunks [312/312]
+  🕸️  Graph: 312 nodes, 487 edges [312/312]
+  🔮 Embedding chunks… 64/312  0.6s
+  🔮 Embedding chunks… 128/312  1.1s
+  ...
+  ✅ Index complete — 48 files, 312 chunks, 312 graph nodes
+
+  ⏱️  Phase timings:
+     🔍 Scan         ▓░░░░░░░░░░░░░░░░░░░   0.12s  (2%)
+     🕸️  Graph        ▓▓░░░░░░░░░░░░░░░░░░   0.31s  (5%)
+     🔮 Embed        ████████████████░░░░   5.21s  (87%)
+     ✅ Done         ░░░░░░░░░░░░░░░░░░░░   0.04s  (1%)
+     Total                                  5.99s
+
+  📊 Chunk breakdown by type:
+     method        187  ████████████████░░░░  60%
+     class          68  ██████░░░░░░░░░░░░░░  22%
+     endpoint       41  ███░░░░░░░░░░░░░░░░░  13%
+     field          16  █░░░░░░░░░░░░░░░░░░░   5%
+     TOTAL         312
+```
+
+### `--verbose` output (ask)
+
+```
+  ────────────────────────────────────────────────────────────────────────
+  DEBUG — CodeSearch pipeline
+  ────────────────────────────────────────────────────────────────────────
+  Collection size  : 312 chunks indexed
+  Embed query      : 12 ms  (all-MiniLM-L6-v2)
+  Vector search    : 8 ms  → 10 results returned
+  Graph expansion  : 4 neighbour nodes added to context
+  Context window   : 9,842 chars / 12,000 max  (12 blocks)
+
+  Vector search results (ranked by cosine similarity):
+     1. [████████░░] 0.821  METHOD    OrderService.retryPayment
+     2. [███████░░░] 0.779  METHOD    PaymentProcessor.retry
+  ...
+  ────────────────────────────────────────────────────────────────────────
+  Sending context to Claude Sonnet → streaming answer...
+  ────────────────────────────────────────────────────────────────────────
+
+  [answer appears here, streamed token by token]
+
+  📋 Sources  (top results):
+     1. [████████░░] METHOD: OrderService.retryPayment
+          src/main/java/com/example/OrderService.java:142
+     2. [███████░░░] METHOD: PaymentProcessor.retry
+          ...
+
+  ⏱️  Wall time: 2.41s  (embed: 0.012s  search: 0.008s  claude: 2.39s)
+```
+
+### CodeSearch Web UI
+
+Start `springinsight web` and navigate to `http://localhost:8765/search`.
+
+- Paste a GitHub URL or local path → click **Index** to build (or rebuild) the vector index
+- Type a natural-language question and press Enter or click **Ask**
+- Answers stream token-by-token; source citations appear with similarity scores
+- Each conversation turn persists in the page for reference
+
+---
+
+## Pillar 3 — SpringTeam
+
+Delegate development work to a team of AI agents. Each task goes through a write → review → approve/reject workflow — you stay in control.
+
+### Agents in the team
+
+| Agent | Role |
+|-------|------|
+| Feature Writer | Implements features from natural-language descriptions |
+| Test Writer | Writes JUnit 5 + Mockito tests for new or existing code |
+| Doc Writer | Generates Javadoc, README sections, OpenAPI annotations |
+| Refactor Agent | Improves code quality, applies patterns, fixes smells |
+| Security Fixer | Applies security patches identified by Code Review agents |
+| Code Reviewer | Reviews other agents' output before it's surfaced to you |
+
+### SpringTeam CLI
+
+```bash
+# Delegate a task (agent auto-selected based on description)
+springinsight team task "Add pagination to the /orders endpoint"
+springinsight team task "Write unit tests for OrderService"
+springinsight team task "Fix the SQL injection in UserRepository.java:142"
+
+# Specify an agent explicitly
+springinsight team task "Refactor PaymentService to use strategy pattern" --skill refactor
+springinsight team task "Document the auth flow" --skill docs
+
+# Set priority (1 = highest, default: 3)
+springinsight team task "Critical security patch for JWT validation" --priority 1
+
+# List all tasks and their status
+springinsight team list
+
+# Show detail for a specific task
+springinsight team status <task-id>
+
+# Start processing pending tasks
+springinsight team start
+
+# Stop the team (graceful — finishes current task)
+springinsight team stop
+
+# Approve a completed task (accept the changes)
+springinsight team approve <task-id>
+
+# Reject a task (send it back with optional feedback)
+springinsight team reject <task-id>
+springinsight team reject <task-id> --reason "Use Optional<T> not null return"
+```
+
+### Task lifecycle
+
+```
+PENDING → IN_PROGRESS → REVIEW → APPROVED
+                                ↘ REJECTED → PENDING (retry)
+```
+
+Tasks in `REVIEW` state appear in the Web UI (`/tasks`) with a diff view, accept/reject buttons, and the agent's reasoning.
+
+### SpringTeam Web UI
+
+Navigate to `http://localhost:8765/tasks` to see the team's Kanban board:
+
+- **Pending** — tasks queued for the team
+- **In Progress** — task currently being worked on by an agent
+- **For Review** — completed tasks waiting for your approval (diff view)
+- **Done** — approved tasks ready to apply to your codebase
+
+---
 
 ### GitHub PR Integration
 
@@ -503,7 +739,7 @@ springinsight github scan-pr https://github.com/myorg/service/pull/42
 
 ---
 
-## New Agents: A16 & A17
+## New Agents: A16, A17 & A18
 
 ### A16 — Spring Boot Upgrade Advisor
 
@@ -537,6 +773,26 @@ Covers seven non-functional requirement pillars with concrete, measurable fixes.
 
 > 💡 `spring.jpa.open-in-view=true` (Spring Boot's default) is always flagged **HIGH** — it holds a Hibernate session open for the entire HTTP request lifetime and is the single most common cause of performance problems in Spring Boot apps.
 
+### A18 — Reverse Engineering
+
+Reconstructs the intent, architecture, and documentation of any Spring Boot codebase — including closed-source JARs, legacy code with no docs, or third-party services you need to understand quickly.
+
+**What it produces:**
+- Architecture overview: layers, modules, key services, data flow
+- Annotated class/method inventory with inferred responsibilities
+- Sequence diagrams for the most important flows (Mermaid)
+- OpenAPI-style endpoint catalogue inferred from `@RestController` classes
+- Onboarding guide for new developers
+- Gap analysis: what's missing (tests, docs, error handling)
+
+```bash
+# Reverse-engineer a local project
+springinsight run ./legacy-service --agents A18
+
+# Or include it in a full scan
+springinsight run ./legacy-service
+```
+
 ---
 
 ## Agents Reference
@@ -560,6 +816,7 @@ Covers seven non-functional requirement pillars with concrete, measurable fixes.
 | A08 | LLD Generator | Opus | 3 | Class diagrams, ER diagrams, sequence diagrams (Mermaid) |
 | A06 | Test Generator | Sonnet | 4 | JUnit 5 + Mockito, @WebMvcTest, @DataJpaTest, security tests |
 | A07 | Feature Docs | Sonnet | 4 | Feature specs, REST API reference, developer onboarding guide |
+| **A18** | **Reverse Engineering** ⭐ | Opus | 3 | Reconstructs architecture, intent, and documentation from closed-source or legacy code |
 
 Run `springinsight agents` to see status and enable/disable each agent.
 
@@ -579,16 +836,74 @@ springinsight run        Scan a project (positional arg or --project)
   --clear-cache          Clear file hash cache before scanning
   --max-files 100        Override per-agent file cap
 
-springinsight web        Start the Web UI
+springinsight web        Start the Web UI (all three pillars)
   --verbose / -v         Stream agent logs to terminal
   --port 9000            Custom port (default 8765)
   --open                 Open browser automatically
+                         Routes: / (scan)  /search (CodeSearch)  /tasks (SpringTeam)
 
 springinsight report     Display latest run report
   --pdf ./report.pdf     Export as PDF (requires reportlab)
   --severity CRITICAL    Filter by severity
   --run-id <id>          Specific run
   --export ./report.md   Export markdown report
+
+# ── Pillar 2: CodeSearch ─────────────────────────────────────────────────────
+
+springinsight search index <project>
+  Build / rebuild the semantic vector index for a project.
+  <project>              Local path or GitHub URL (cloned to ~/.springinsight/repos/)
+  --force                Re-index even if already indexed
+  --work-dir <dir>       Custom work directory (default: ~/.springinsight)
+  --verbose / -v         Show per-phase timing, per-batch progress, chunk-type breakdown
+
+springinsight search ask "<question>"
+  Ask a natural-language question about an indexed codebase.
+  --project / -p         Project path or GitHub URL (default: current dir)
+  --top-k N              Number of vector results to retrieve (default: 10)
+  --work-dir <dir>       Custom work directory
+  --verbose / -v         Show collection size, embed/search timing (ms), all results
+                         with cosine scores and snippets, context window chars,
+                         wall-time split (embed / vector / claude)
+
+springinsight search status
+  Show index statistics for a project.
+  --project / -p         Project path or GitHub URL (default: current dir)
+  --work-dir <dir>       Custom work directory
+  --verbose / -v         Show chunk-type breakdown, DB/Chroma paths
+
+# ── Pillar 3: SpringTeam ──────────────────────────────────────────────────────
+
+springinsight team task "<description>"
+  Delegate a development task to the AI team.
+  --skill SKILL          Force a specific agent: feature | tests | docs |
+                         refactor | security | review
+  --priority N           1 (highest) – 5 (lowest), default: 3
+
+springinsight team list  List all tasks with IDs, status, and assigned agent
+springinsight team status <task-id>
+  Show full detail for a task: description, agent reasoning, diff preview
+
+springinsight team start Start processing pending tasks
+springinsight team stop  Gracefully stop after the current task finishes
+
+springinsight team approve <task-id>
+  Accept the agent's output and mark task APPROVED
+
+springinsight team reject <task-id>
+  Send a task back for revision.
+  --reason "feedback"    Optional feedback to guide the retry
+
+# ── A18: Reverse Engineering ──────────────────────────────────────────────────
+
+springinsight reverse <project>
+  Reconstruct architecture, intent, and documentation from any Spring Boot
+  codebase — including closed-source JARs and legacy code with no docs.
+  <project>              Local path or GitHub URL
+  --output ./docs        Output directory for generated documents
+  --format md|html|pdf   Output format (default: md)
+
+# ── Other commands ────────────────────────────────────────────────────────────
 
 springinsight context    Manage global project context and custom rules
   show                   Show current global context
@@ -614,11 +929,24 @@ springinsight github     GitHub PR integration
 springinsight mcp        Start the MCP server (for Claude Code / Cursor / Cline)
 springinsight findings   List findings with severity/agent filters
 springinsight history    Show run history table with scores
-springinsight agents     List all 17 agents with phase and status
+springinsight agents     List all 18 agents with phase and status
 springinsight init       Initialise project context (creates context.yaml)
 ```
 
 Full options: `springinsight <command> --help`
+
+### GitHub URL support
+
+All commands that accept a `<project>` argument also accept a GitHub (or GitLab / Bitbucket) URL. The repo is cloned once and cached in `~/.springinsight/repos/`. Subsequent runs do a `git pull` to update.
+
+```bash
+# All of these accept a GitHub URL:
+springinsight run       https://github.com/org/repo
+springinsight search index  https://github.com/org/repo
+springinsight search ask "..." -p https://github.com/org/repo
+springinsight search status  -p https://github.com/org/repo
+springinsight reverse   https://github.com/org/repo
+```
 
 ---
 
@@ -657,7 +985,8 @@ Other config files at `~/.springinsight/`:
 
 ## Roadmap
 
-- [x] Phase 1–4: All 15 agents
+**Pillar 1 — Code Review**
+- [x] Phase 1–4: All 18 agents (A01–A18)
 - [x] Web UI with live SSE progress, agent enable/disable, verbose logs
 - [x] MCP Server — Claude Code / Cursor / Cline integration
 - [x] VS Code extension — scan + diagnostics + Problems panel
@@ -665,10 +994,36 @@ Other config files at `~/.springinsight/`:
 - [x] Project Context — custom rules injected into every agent
 - [x] PDF export — professional scan reports
 - [x] GitHub PR auto-scanning + auto-comment
+- [x] A16 Spring Boot Upgrade Advisor
+- [x] A17 NFR Optimizer
+- [x] A18 Reverse Engineering
 - [x] PyPI publishing with OIDC trusted publishing
 - [x] Product website — [springinsight.vercel.app](https://springinsight.vercel.app)
 - [ ] GitHub Actions marketplace action (`springinsight-action`)
 - [ ] Incremental scanning (skip unchanged files)
+
+**Pillar 2 — CodeSearch**
+- [x] Java AST parser — classes, methods, endpoints, fields, config
+- [x] SQLite code graph with cross-reference edges
+- [x] sentence-transformers all-MiniLM-L6-v2 embeddings (local, private)
+- [x] ChromaDB cosine-similarity vector store
+- [x] Graph expansion for richer context
+- [x] Claude Sonnet synthesis with source citation
+- [x] CLI (`search index / ask / status`) with `--verbose` debug output
+- [x] GitHub URL support — auto-clone and index remote repos
+- [x] Web UI at `/search` with streaming SSE answer rendering
+- [ ] Incremental re-indexing (only changed files)
+- [ ] Multi-language support (Kotlin)
+
+**Pillar 3 — SpringTeam**
+- [x] Task queue with SQLite state machine
+- [x] 6-agent team: Feature Writer, Test Writer, Doc Writer, Refactor, Security Fixer, Code Reviewer
+- [x] CLI (`team task / list / status / start / stop / approve / reject`)
+- [x] Web UI Kanban board at `/tasks` with approve/reject workflow
+- [ ] Git integration — auto-commit approved tasks to a branch
+- [ ] Slack/email notifications when tasks need review
+
+**Platform**
 - [ ] SaaS hosted version
 
 ---

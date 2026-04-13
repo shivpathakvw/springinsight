@@ -318,14 +318,8 @@ class Orchestrator:
         self.db.update_task_status(task_id, TaskStatus.IN_PROGRESS)
         self._broadcast("task_updated", self._task_payload(task_id))
 
-        self.db.post_message(task_id, skill,
-                             f"{skill.capitalize()} agent claimed task", "status_update")
-        self._broadcast("message", {
-            "task_id": task_id,
-            "from": skill,
-            "content": f"Starting work on: {task['title']}",
-            "type": "status_update",
-        })
+        self._step(task_id, skill,
+                   f"🤝 {skill.capitalize()} agent claimed task — starting work")
 
         try:
             output, output_type = await self._execute_task(task, skill)
@@ -333,16 +327,7 @@ class Orchestrator:
                 task_id, TaskStatus.REVIEW,
                 output=output, output_type=output_type,
             )
-            self.db.post_message(task_id, skill,
-                                 f"Work complete. Output: {output[:200]}...",
-                                 "completion")
             self._broadcast("task_updated", self._task_payload(task_id))
-            self._broadcast("message", {
-                "task_id": task_id,
-                "from": skill,
-                "content": f"✓ Completed: {task['title']}",
-                "type": "completion",
-            })
 
             # Trigger coordination workflows
             await self._trigger_followups(task, skill, output)
@@ -350,43 +335,70 @@ class Orchestrator:
         except Exception as e:
             log.exception(f"[{skill}] Task {task_id} failed")
             self.db.update_task_status(task_id, TaskStatus.FAILED, error=str(e))
-            self.db.post_message(task_id, skill, f"Error: {str(e)[:300]}", "blocker")
+            self._step(task_id, skill, f"❌ Error: {str(e)[:300]}", "blocker")
             self._broadcast("task_updated", self._task_payload(task_id))
         finally:
             self.db.set_agent_status(skill, "idle")
 
+    def _step(self, task_id: str, agent: str, content: str, mtype: str = "status_update"):
+        """Post a step message to the DB and broadcast it via SSE."""
+        self.db.post_message(task_id, agent, content, mtype)
+        self._broadcast("message", {
+            "task_id": task_id,
+            "from": agent,
+            "content": content,
+            "type": mtype,
+        })
+
     async def _execute_task(self, task: Dict, skill: str) -> tuple[str, str]:
-        """Run claude with the skill prompt + task description."""
+        """Run claude with the skill prompt + task description, posting verbose step messages."""
         task_id = task["id"]
         project_path = task["project_path"]
         description = task["description"]
         context = task.get("context") or {}
+        t0 = time.monotonic()
 
-        # Build the full prompt
+        # ── Phase 1: Analyse & build context ─────────────────────────────────
+        self._step(task_id, skill,
+                   f"🔍 Analysing task: {task['title'][:80]}")
+
         system_prompt = AGENT_PROMPTS[skill]
-        user_block = (
-            f"PROJECT: {project_path}\n\n"
-            f"TASK:\n{description}\n"
-        )
-        if context:
-            if context.get("files"):
-                user_block += f"\nFOCUS FILES:\n" + "\n".join(f"- {f}" for f in context["files"])
-            if context.get("notes"):
-                user_block += f"\nNOTES:\n{context['notes']}"
+        user_block = f"PROJECT: {project_path}\n\nTASK:\n{description}\n"
 
-        # Check for parent task output (handoff context)
+        focus_files = context.get("files", [])
+        if focus_files:
+            file_list = ", ".join(focus_files[:4]) + ("…" if len(focus_files) > 4 else "")
+            user_block += "\nFOCUS FILES:\n" + "\n".join(f"- {f}" for f in focus_files)
+            self._step(task_id, skill, f"📂 Focus files: {file_list}")
+
+        if context.get("notes"):
+            user_block += f"\nNOTES:\n{context['notes']}"
+
+        # Load dependency outputs
+        dep_count = 0
         parent_id = task.get("parent_task_id")
         if parent_id:
             deps = task.get("depends_on") or []
             for dep_id in deps:
                 dep_task = self.db.get_task(dep_id)
                 if dep_task and dep_task.get("output"):
-                    user_block += f"\n\nOUTPUT FROM PREVIOUS TASK ({dep_id}):\n{dep_task['output'][:2000]}"
+                    user_block += (
+                        f"\n\nOUTPUT FROM PREVIOUS TASK ({dep_id}):\n"
+                        f"{dep_task['output'][:2000]}"
+                    )
+                    dep_count += 1
+
+        if dep_count:
+            self._step(task_id, skill,
+                       f"🔗 Loaded output from {dep_count} upstream task(s)")
 
         full_prompt = f"<system>\n{system_prompt}\n</system>\n\n{user_block}"
         model = AGENT_MODELS[skill]
 
-        # Stream output and capture
+        # ── Phase 2: Dispatch to Claude ───────────────────────────────────────
+        self._step(task_id, skill,
+                   f"🤖 Dispatching to {model} with tools: Read, Write, Bash, Glob, Grep")
+
         proc = await asyncio.create_subprocess_exec(
             "claude", "--print", "--model", model,
             "--allowedTools", "Bash,Read,Write,Glob,Grep",
@@ -398,22 +410,84 @@ class Orchestrator:
         await proc.stdin.drain()
         proc.stdin.close()
 
-        output_parts = []
+        # ── Phase 3: Stream & parse output ───────────────────────────────────
+        # Patterns we recognise in Claude's streamed text
+        _FILE_EXTS  = re.compile(r'[\w/.\-]+\.(java|kt|xml|yml|yaml|properties|gradle|json|sql)')
+        _READ_HINTS = re.compile(r'\b(read|reading|open|loaded?|fetch)\b', re.I)
+        _WRITE_HINTS = re.compile(r'\b(writ|creat|generat|output|emit)\w*\b', re.I)
+        _CMD_HINTS  = re.compile(r'(mvn |gradle |git |curl |bash |\$ )', re.I)
+
+        output_parts: List[str] = []
+        line_buf = ""
+        total_bytes = 0
+        last_heartbeat = t0
+        files_seen: Set[str] = set()
+        HEARTBEAT_EVERY = 10.0   # seconds between "still working…" messages
+
         while True:
             chunk = await proc.stdout.read(512)
             if not chunk:
                 break
             text = chunk.decode("utf-8", errors="replace")
             output_parts.append(text)
-            # Log every ~1KB to the task
-            if sum(len(p) for p in output_parts) % 1024 < 512:
-                self.db.append_run_log(task_id, text)
+            total_bytes += len(text)
+            self.db.append_run_log(task_id, text)
             self._broadcast("task_log", {"task_id": task_id, "chunk": text})
+
+            # ── Parse lines for meaningful events ──────────────────────────
+            line_buf += text
+            lines = line_buf.split("\n")
+            line_buf = lines[-1]          # keep incomplete last line
+
+            for line in lines[:-1]:
+                s = line.strip()
+                if not s or len(s) > 300:
+                    continue
+
+                # Detect file mentions
+                for m in _FILE_EXTS.finditer(s):
+                    fname = m.group().split("/")[-1]
+                    if fname not in files_seen:
+                        files_seen.add(fname)
+                        if _WRITE_HINTS.search(s):
+                            self._step(task_id, skill, f"✏️  Writing {fname}")
+                        else:
+                            self._step(task_id, skill, f"📖 Reading {fname}")
+
+                # Detect shell commands
+                if _CMD_HINTS.search(s):
+                    cmd_preview = s[:80].strip()
+                    self._step(task_id, skill, f"⚙️  Running: {cmd_preview}")
+
+            # ── Periodic heartbeat ─────────────────────────────────────────
+            now = time.monotonic()
+            if now - last_heartbeat >= HEARTBEAT_EVERY:
+                elapsed = now - t0
+                kb = total_bytes / 1024
+                self._step(task_id, skill,
+                           f"⏳ Working… {elapsed:.0f}s elapsed · {kb:.1f} KB processed")
+                last_heartbeat = now
 
         await proc.wait()
         output = "".join(output_parts).strip()
+        elapsed_total = time.monotonic() - t0
 
-        # Infer output type from skill
+        # ── Phase 4: Completion summary ───────────────────────────────────────
+        lines_out = output.count("\n") + 1 if output else 0
+        skill_done = {
+            AgentSkill.CODER:        f"💻 Implementation ready — {lines_out} lines generated",
+            AgentSkill.TESTER:       f"🧪 Test file generated — {lines_out} lines",
+            AgentSkill.REVIEWER:     f"📋 Code review complete",
+            AgentSkill.DB_OPTIMIZER: f"🗄️  DB optimisations ready — {lines_out} lines",
+            AgentSkill.DOCUMENTER:   f"📝 Documentation generated — {lines_out} lines",
+            AgentSkill.PLANNER:      f"📌 Plan created — {lines_out} lines",
+        }
+        self._step(task_id, skill,
+                   skill_done.get(skill, f"✅ Work complete — {lines_out} lines"))
+        self._step(task_id, skill,
+                   f"⏱️  Finished in {elapsed_total:.1f}s — moving to review queue",
+                   "completion")
+
         output_type_map = {
             AgentSkill.CODER:        "code_diff",
             AgentSkill.TESTER:       "test_file",
