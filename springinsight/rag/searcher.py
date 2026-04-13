@@ -22,9 +22,10 @@ import os
 import subprocess
 import sys
 import textwrap
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import AsyncIterator, Dict, List, Optional
+from typing import AsyncIterator, Dict, List, Optional, Tuple
 
 from .code_graph import CodeGraph
 from .indexer import Indexer, _get_embedder
@@ -52,6 +53,13 @@ class SearchResult:
     answer: str
     sources: List[Source] = field(default_factory=list)
     error: str = ""
+    # Debug fields — populated when verbose=True
+    embed_time: float = 0.0
+    search_time: float = 0.0
+    graph_expansion_count: int = 0
+    context_chars: int = 0
+    context_blocks: int = 0
+    collection_size: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -109,18 +117,24 @@ class Searcher:
         if collection is None:
             return SearchResult(query=query, answer="", error="Project not indexed. Run index first.")
 
+        coll_size = collection.count()
+
         # ── 1. Embed query ────────────────────────────────────────────
+        t0 = time.perf_counter()
         embedder = await asyncio.get_event_loop().run_in_executor(None, _get_embedder)
         q_embedding = await asyncio.get_event_loop().run_in_executor(
             None, lambda: embedder.encode(query).tolist()
         )
+        embed_time = time.perf_counter() - t0
 
         # ── 2. Vector search ──────────────────────────────────────────
+        t1 = time.perf_counter()
         results = collection.query(
             query_embeddings=[q_embedding],
-            n_results=min(top_k, collection.count()),
+            n_results=min(top_k, coll_size),
             include=["documents", "metadatas", "distances"],
         )
+        search_time = time.perf_counter() - t1
 
         docs      = results["documents"][0] if results["documents"] else []
         metadatas = results["metadatas"][0]  if results["metadatas"] else []
@@ -145,13 +159,13 @@ class Searcher:
         # ── 3. Graph expansion ─────────────────────────────────────────
         node_ids_seen: set = set()
         for meta in metadatas:
-            # Fetch neighbours from graph to enrich context
             fqn = meta.get("fqn", "")
             neighbours = self.graph.search_by_name(project_path, fqn.split(".")[-1])
             for n in neighbours[:3]:
                 if n["id"] not in node_ids_seen and n.get("text"):
                     node_ids_seen.add(n["id"])
                     context_parts.append(f"[RELATED: {n['fqn']}]\n{n['text'][:400]}")
+        graph_expansion_count = len(node_ids_seen)
 
         # Build primary context from vector results
         primary = []
@@ -164,11 +178,23 @@ class Searcher:
             total += len(block)
 
         context = "\n\n---\n\n".join(primary + context_parts[:5])
+        context_chars = len(context)
+        context_blocks = len(primary) + min(len(context_parts), 5)
 
         # ── 4. Synthesise answer ───────────────────────────────────────
         answer = await self._synthesise(query, context)
 
-        return SearchResult(query=query, answer=answer, sources=sources)
+        return SearchResult(
+            query=query,
+            answer=answer,
+            sources=sources,
+            embed_time=round(embed_time, 3),
+            search_time=round(search_time, 3),
+            graph_expansion_count=graph_expansion_count,
+            context_chars=context_chars,
+            context_blocks=context_blocks,
+            collection_size=coll_size,
+        )
 
     # ------------------------------------------------------------------
     # Streaming search (yields tokens for SSE)
