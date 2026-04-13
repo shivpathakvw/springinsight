@@ -253,7 +253,10 @@ class SpringTeamDB:
             ).fetchall()
         ready = []
         for row in [_row(r) for r in rows]:
-            deps = json.loads(row.get("depends_on") or "[]")
+            # _row() already parsed depends_on from JSON → list; never call json.loads again
+            deps = row.get("depends_on") or []
+            if isinstance(deps, str):          # safety net for legacy rows
+                deps = json.loads(deps)
             if not deps:
                 ready.append(row)
                 continue

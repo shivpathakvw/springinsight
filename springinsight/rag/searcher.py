@@ -197,6 +197,68 @@ class Searcher:
         )
 
     # ------------------------------------------------------------------
+    # Raw context fetch (no Claude synthesis — for agent prompt injection)
+    # ------------------------------------------------------------------
+
+    async def fetch_context(
+        self, project_path: str, query: str, top_k: int = 8
+    ) -> Optional[str]:
+        """
+        Embed the query, run vector search + graph expansion, and return the
+        raw formatted context string.  Does NOT call Claude — cheap to run.
+        Returns None if the project is not indexed.
+        """
+        project_path = str(Path(project_path).resolve())
+        collection = self.indexer.get_collection(project_path)
+        if collection is None or collection.count() == 0:
+            return None
+
+        try:
+            embedder = await asyncio.get_event_loop().run_in_executor(None, _get_embedder)
+            q_embedding = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: embedder.encode(query).tolist()
+            )
+            coll_size = collection.count()
+            results = collection.query(
+                query_embeddings=[q_embedding],
+                n_results=min(top_k, coll_size),
+                include=["documents", "metadatas", "distances"],
+            )
+            docs      = results["documents"][0] if results["documents"] else []
+            metadatas = results["metadatas"][0]  if results["metadatas"] else []
+
+            # Graph expansion
+            context_parts: List[str] = []
+            node_ids_seen: set = set()
+            for meta in metadatas:
+                fqn = meta.get("fqn", "")
+                for n in self.graph.search_by_name(project_path, fqn.split(".")[-1])[:2]:
+                    if n["id"] not in node_ids_seen and n.get("text"):
+                        node_ids_seen.add(n["id"])
+                        context_parts.append(
+                            f"[RELATED: {n['fqn']}]\n{n['text'][:400]}"
+                        )
+
+            # Build primary blocks
+            primary: List[str] = []
+            total = 0
+            for doc, meta in zip(docs, metadatas):
+                block = (
+                    f"[{meta.get('node_type','').upper()}: {meta.get('fqn','')}  "
+                    f"{meta.get('file_path','')}:{meta.get('line_start','')}]\n{doc}"
+                )
+                if total + len(block) > self.MAX_CONTEXT_CHARS:
+                    break
+                primary.append(block)
+                total += len(block)
+
+            if not primary:
+                return None
+            return "\n\n---\n\n".join(primary + context_parts[:4])
+        except Exception:
+            return None
+
+    # ------------------------------------------------------------------
     # Streaming search (yields tokens for SSE)
     # ------------------------------------------------------------------
 

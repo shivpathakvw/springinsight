@@ -32,6 +32,14 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Set
 from .models import SpringTeamDB, TaskStatus, AgentSkill, ALL_SKILLS, _row
 from .skills import AGENT_PROMPTS, AGENT_MODELS, classify_task
 
+# CodeSearch RAG (optional — only used when a project is already indexed)
+try:
+    from ..rag.searcher import Searcher as _RAGSearcher
+    _RAG_AVAILABLE = True
+except Exception:
+    _RAGSearcher = None
+    _RAG_AVAILABLE = False
+
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -341,6 +349,32 @@ class Orchestrator:
         finally:
             self.db.set_agent_status(skill, "idle")
 
+    # ------------------------------------------------------------------
+    # CodeSearch RAG context injection
+    # ------------------------------------------------------------------
+
+    async def _codesearch_context(
+        self, project_path: str, query: str, top_k: int = 8
+    ) -> Optional[str]:
+        """
+        If the project has a CodeSearch index, fetch the top-k semantically
+        relevant code chunks and return them as a formatted context block.
+        Returns None if no index exists or RAG is unavailable.
+        """
+        if not _RAG_AVAILABLE:
+            return None
+        try:
+            db_path = self.db.db_path
+            chroma_dir = str(Path(db_path).parent / "chroma")
+            searcher = _RAGSearcher(db_path=db_path, chroma_dir=chroma_dir)
+
+            # fetch_context runs embed+vector+graph but skips Claude synthesis
+            # — cheap, no extra API cost
+            return await searcher.fetch_context(project_path, query, top_k=top_k)
+        except Exception as e:
+            log.debug(f"[codesearch_context] skipped: {e}")
+            return None
+
     def _step(self, task_id: str, agent: str, content: str, mtype: str = "status_update"):
         """Post a step message to the DB and broadcast it via SSE."""
         self.db.post_message(task_id, agent, content, mtype)
@@ -380,6 +414,8 @@ class Orchestrator:
         parent_id = task.get("parent_task_id")
         if parent_id:
             deps = task.get("depends_on") or []
+            if isinstance(deps, str):
+                deps = json.loads(deps)
             for dep_id in deps:
                 dep_task = self.db.get_task(dep_id)
                 if dep_task and dep_task.get("output"):
@@ -392,6 +428,27 @@ class Orchestrator:
         if dep_count:
             self._step(task_id, skill,
                        f"🔗 Loaded output from {dep_count} upstream task(s)")
+
+        # ── CodeSearch context injection ──────────────────────────────────────
+        # Use the existing vector index (if any) to ground the agent in real code
+        # before it starts writing. Falls back to pure AI if no index exists.
+        search_query = f"{task['title']} {description[:300]}"
+        rag_context = await self._codesearch_context(project_path, search_query, top_k=8)
+        if rag_context:
+            user_block += (
+                f"\n\n── RELEVANT CODE FROM CODEBASE (via CodeSearch index) ──\n"
+                f"Use the following indexed code as ground-truth reference. "
+                f"Prefer modifying existing patterns rather than inventing new ones.\n\n"
+                f"{rag_context}"
+            )
+            chunk_count = rag_context.count("[METHOD:") + rag_context.count("[CLASS:") + \
+                          rag_context.count("[ENDPOINT:") + rag_context.count("[FIELD:")
+            self._step(task_id, skill,
+                       f"🔎 CodeSearch index found — injected {chunk_count} relevant code chunks as context")
+        else:
+            self._step(task_id, skill,
+                       "💡 No CodeSearch index found — using pure AI generation "
+                       "(tip: run `springinsight search index <project>` for grounded output)")
 
         full_prompt = f"<system>\n{system_prompt}\n</system>\n\n{user_block}"
         model = AGENT_MODELS[skill]

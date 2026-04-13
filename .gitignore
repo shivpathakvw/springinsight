@@ -21,7 +21,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-
+.git-rewrite/
 # ── Virtual environments ───────────────────────────────────────────────────────
 .venv/
 venv/
