@@ -1010,12 +1010,22 @@ async def api_reject_task(task_id: str, request: Request):
     return {"ok": ok}
 
 
+@app.post("/api/team/tasks/{task_id}/cancel")
+async def api_cancel_task(task_id: str):
+    """Cancel a pending / in-progress task and kill its subprocess."""
+    data_dir = _data_dir()
+    orch = _team_orch(data_dir)
+    ok = orch.cancel_task(task_id)
+    return {"ok": ok}
+
+
 @app.delete("/api/team/tasks/{task_id}")
 async def api_delete_task(task_id: str):
+    """Hard-delete a task (kills subprocess if running)."""
     data_dir = _data_dir()
-    db = _team_db(data_dir)
-    db.delete_task(task_id)
-    return {"ok": True}
+    orch = _team_orch(data_dir)
+    ok = orch.remove_task(task_id)
+    return {"ok": ok}
 
 
 @app.post("/api/team/start")

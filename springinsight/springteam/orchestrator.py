@@ -87,6 +87,7 @@ class Orchestrator:
         self._workers: Dict[str, asyncio.Task] = {}
         self._running = False
         self._event_queues: List[asyncio.Queue] = []   # one per SSE subscriber
+        self._running_procs: Dict[str, Any] = {}       # task_id → asyncio.subprocess.Process
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -406,6 +407,7 @@ class Orchestrator:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
+        self._running_procs[task_id] = proc   # register so cancel_task() can kill it
         proc.stdin.write(full_prompt.encode())
         await proc.stdin.drain()
         proc.stdin.close()
@@ -469,6 +471,7 @@ class Orchestrator:
                 last_heartbeat = now
 
         await proc.wait()
+        self._running_procs.pop(task_id, None)   # unregister
         output = "".join(output_parts).strip()
         elapsed_total = time.monotonic() - t0
 
@@ -605,6 +608,52 @@ class Orchestrator:
             self._broadcast("task_updated", self._task_payload(task_id))
             return True
         return False
+
+    def cancel_task(self, task_id: str) -> bool:
+        """
+        Cancel a pending, claimed, or in-progress task.
+        Kills the running claude subprocess if one exists, marks the task FAILED.
+        """
+        task = self.db.get_task(task_id)
+        if not task:
+            return False
+        cancellable = {TaskStatus.PENDING, TaskStatus.CLAIMED, TaskStatus.IN_PROGRESS, TaskStatus.BLOCKED}
+        if task["status"] not in cancellable:
+            return False
+
+        # Kill subprocess if running
+        proc = self._running_procs.pop(task_id, None)
+        if proc:
+            try:
+                proc.kill()
+                log.info(f"[cancel] Killed subprocess for task {task_id}")
+            except Exception:
+                pass
+
+        self.db.update_task_status(task_id, TaskStatus.FAILED,
+                                   error="Cancelled by user")
+        self._step(task_id, "user", "⛔ Task cancelled by user", "blocker")
+        self._broadcast("task_updated", self._task_payload(task_id))
+        return True
+
+    def remove_task(self, task_id: str) -> bool:
+        """
+        Hard-delete a task from the DB (any status).
+        Also cancels if in-progress.
+        """
+        task = self.db.get_task(task_id)
+        if not task:
+            return False
+        # Stop any running subprocess first
+        proc = self._running_procs.pop(task_id, None)
+        if proc:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+        self.db.delete_task(task_id)
+        self._broadcast("task_updated", {"id": task_id, "status": "__deleted__"})
+        return True
 
 
 # ---------------------------------------------------------------------------
